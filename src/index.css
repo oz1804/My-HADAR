@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/* הגדרת פונט Assistant כברירת המחדל של המערכת */
+@theme {
+  --font-sans: "Assistant", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* מאפשר לנו שליטה ידנית על Dark Mode */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* עיצוב פס הגלילה העדין של העגלה */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1; /* צבע אפור עדין */
+  border-radius: 10px;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #475569; /* צבע כהה למצב לילה */
+}
