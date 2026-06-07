@@ -27,7 +27,7 @@ export default function Login({ onLogin }) {
         
         <div className="text-center">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            התחברות למערכת
+            התחברות למערכת הד"ר
           </h2>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
             הזן את שם המשתמש שלך כדי להמשיך
