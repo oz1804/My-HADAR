@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import BudgetaryFields from './BudgetaryFields';
 import DocumentsModal from './DocumentsModal';
 import data from '../data/data.json';
 
@@ -12,14 +11,30 @@ export default function CheckoutHeader({
   justification, 
   onHeaderJustificationChange,
   headerDescription,
-  setHeaderDescription
+  setHeaderDescription,
+  headerProjectId,
+  headerTaskId,
+  headerExpTypeId,
+  headerExpOrgId,
+  onHeaderBudgetChange,
+  hasExpenseLines,
+  isBudgetMixed // קולט את הדגל מהאב
 }) {
   const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
+
+  const today = new Date().toISOString().split('T')[0];
+  const isItemActive = (item) => {
+    if (!item) return false;
+    const isStarted = !item.startDate || item.startDate <= today;
+    const isNotEnded = !item.endDate || item.endDate >= today;
+    return isStarted && isNotEnded;
+  };
+
+  const selectedProject = headerProjectId ? data.projects?.find(p => p.id === Number(headerProjectId)) : null;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       
-      {/* --- צד ימין: שדות מחלחלים וסעיף תקציבי --- */}
       <div className="lg:col-span-8 space-y-6">
         
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 md:p-6">
@@ -38,18 +53,22 @@ export default function CheckoutHeader({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">ארגון מלאי</label>
-              <select 
-                value={headerOrg}
-                onChange={(e) => onHeaderOrgChange(e.target.value)}
-                className={`w-full p-2.5 border rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none ${
-                  headerOrg === 'mixed' ? 'border-amber-500 text-amber-600 font-semibold' : 'border-gray-300 dark:border-gray-600'
-                }`}
-              >
-                {headerOrg === 'mixed' && <option value="mixed">ארגוני מלאי שונים</option>}
-                {data.inventoryOrganizations.map(org => (
-                  <option key={org.id} value={org.id}>{org.code} - {org.name}</option>
-                ))}
-              </select>
+              {headerOrg === 'mixed' ? (
+                <div className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm font-bold text-gray-500 border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
+                  ארגוני מלאי שונים
+                </div>
+              ) : (
+                <select 
+                  value={headerOrg}
+                  onChange={(e) => onHeaderOrgChange(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                >
+                  <option value="">בחר ארגון...</option>
+                  {data.inventoryOrganizations?.map(org => (
+                    <option key={org.id} value={org.id}>{org.code} - {org.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">הערות לקניין</label>
@@ -86,12 +105,101 @@ export default function CheckoutHeader({
               שורות חלוקה (Distribution)
             </span>
           </div>
-          <BudgetaryFields />
+          
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${hasExpenseLines ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-4`}>
+            {/* אם הסעיף התקציבי מעורב - מציגים בלוק יחיד במקום כל התיבות */}
+            {isBudgetMixed ? (
+              <div className={`col-span-1 md:col-span-2 ${hasExpenseLines ? 'lg:col-span-4' : 'lg:col-span-2'} w-full p-3.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm font-bold text-gray-500 border border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center gap-2`}>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 opacity-70">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+                </svg>
+                סעיפים תקציביים שונים
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col">
+                  <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">פרויקט</label>
+                  <select 
+                    value={headerProjectId || ''}
+                    onChange={(e) => onHeaderBudgetChange('projectId', e.target.value)}
+                    className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                  >
+                    <option value="">בחר פרויקט...</option>
+                    {data.projects
+                      ?.filter(p => {
+                        if (!isItemActive(p)) return false;
+                        if (headerOrg && headerOrg !== 'mixed' && !p.inventoryOrgIds?.includes(Number(headerOrg))) return false;
+                        return true;
+                      })
+                      .map(p => (
+                        <option key={p.id} value={p.id}>{p.projectCode} - {p.projectName}</option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">משימה</label>
+                  <select 
+                    value={headerTaskId || ''}
+                    onChange={(e) => onHeaderBudgetChange('taskId', e.target.value)}
+                    className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                  >
+                    <option value="">בחר משימה...</option>
+                    {data.tasks
+                      ?.filter(t => (!headerProjectId || t.projectId === Number(headerProjectId)) && isItemActive(t))
+                      .map(t => (
+                        <option key={t.id} value={t.id}>{t.taskCode} - {t.taskName}</option>
+                      ))}
+                  </select>
+                </div>
+
+                {hasExpenseLines && (
+                  <>
+                    <div className="flex flex-col">
+                      <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">סוג הוצאה</label>
+                      <select 
+                        value={headerExpTypeId || ''}
+                        onChange={(e) => onHeaderBudgetChange('expenditureTypeId', e.target.value)}
+                        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                      >
+                        <option value="">בחר סוג הוצאה...</option>
+                        {data.expenditureTypes
+                          ?.filter(et => {
+                            if (!isItemActive(et)) return false;
+                            if (selectedProject?.allowedExpenditureTypeIds) {
+                              return selectedProject.allowedExpenditureTypeIds.includes(et.id);
+                            }
+                            return true;
+                          })
+                          .map(et => (
+                            <option key={et.id} value={et.id}>{et.expenditureTypeCode} - {et.name}</option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col">
+                      <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">יחידה מממנת</label>
+                      <select 
+                        value={headerExpOrgId || ''}
+                        onChange={(e) => onHeaderBudgetChange('expenditureOrgId', e.target.value)}
+                        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                      >
+                        <option value="">בחר יחידה מממנת...</option>
+                        {data.expenditureOrganizations?.filter(isItemActive).map(org => (
+                          <option key={org.id} value={org.id}>{org.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+          
         </div>
 
       </div>
 
-      {/* --- צד שמאל: סיכום דרישה --- */}
       <div className="lg:col-span-4">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 md:p-6 sticky top-24">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-5 flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 pb-3">

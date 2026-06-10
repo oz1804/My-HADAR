@@ -202,6 +202,7 @@ function App() {
             globalOrg={globalOrg}
             onBack={() => handleNavigate('home')}
             onSubmit={handleCheckoutSubmit}
+            onRemoveFromCart={(id) => updateLineQty(id, 0)} /* התווסף: מעדכן את העגלה הראשית שמסירים את השורה */
           />
         )}
       </main>
