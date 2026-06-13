@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import data from '../data/data.json';
+import data from '../../data/data.json';
 import CheckoutLineDistributions from './CheckoutLineDistributions';
 
 export default function CheckoutLineRow({ 
@@ -271,7 +271,6 @@ export default function CheckoutLineRow({
                 </div>
               </div>
 
-              {/* התיקון: הסלקטור של "ספק מומלץ" שומר עכשיו ל-supplier */}
               <div className="flex flex-col gap-1">
                 <label className="text-[11px] font-semibold text-gray-500">ספק מומלץ</label>
                 <select 
@@ -302,22 +301,37 @@ export default function CheckoutLineRow({
                 </select>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">מאשר שירות</label>
+              {/* --- שדה המזמין --- */}
+              <div className="flex flex-col gap-1 lg:col-span-1">
+                <label className="text-[11px] font-semibold text-gray-500">מזמין</label>
                 <select 
-                  value={line.serviceApprover || currentUser?.firstName || ''}
-                  onChange={(e) => onLineFieldChange(line.id, 'serviceApprover', e.target.value)}
-                  className="p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  value={line.requester || ''}
+                  onChange={(e) => onLineFieldChange(line.id, 'requester', e.target.value)}
+                  className="p-1.5 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 >
-                  <option value="">{currentUser?.firstName || 'מאשר שירות'}</option>
+                  <option value="">לא הוגדר</option>
                   {data.users?.map(u => (
-                    <option key={u.id} value={u.firstName}>{u.firstName} {u.lastName}</option>
+                    <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                   ))}
                 </select>
               </div>
 
-              {/* התיקון: הסלקטור של "קניין מומלץ" שומר עכשיו ל-buyer */}
-              <div className="flex flex-col gap-1 lg:col-span-2">
+              {/* --- שדה מאשר שירות הוזז לכאן (אחרי מזמין), וערכו תוקן ל-ID --- */}
+              <div className="flex flex-col gap-1 lg:col-span-1">
+                <label className="text-[11px] font-semibold text-gray-500">מאשר שירות</label>
+                <select 
+                  value={line.serviceApprover || currentUser?.id || ''}
+                  onChange={(e) => onLineFieldChange(line.id, 'serviceApprover', e.target.value)}
+                  className="p-1.5 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">לא הוגדר</option>
+                  {data.users?.map(u => (
+                    <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 lg:col-span-1">
                 <label className="text-[11px] font-semibold text-gray-500">קניין מומלץ</label>
                 <select 
                   value={line.buyer || ''}
@@ -329,6 +343,29 @@ export default function CheckoutLineRow({
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700/50">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-semibold text-gray-500">הערות לקניין</label>
+                <textarea 
+                  rows="2"
+                  value={line.buyerNotes || ''}
+                  onChange={(e) => onLineFieldChange(line.id, 'buyerNotes', e.target.value)}
+                  className="p-2 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                  placeholder="הערות שיועברו לקניין..."
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-semibold text-gray-500">הצדקה</label>
+                <textarea 
+                  rows="2"
+                  value={line.justification || ''}
+                  onChange={(e) => onLineFieldChange(line.id, 'justification', e.target.value)}
+                  className="p-2 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                  placeholder="הצדקה לרכש..."
+                />
               </div>
             </div>
             

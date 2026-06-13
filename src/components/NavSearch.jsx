@@ -72,7 +72,7 @@ export default function NavSearch({ onNavigate }) {
         <input
           type="text"
           className="block w-full py-2 xl:py-3.5 ps-9 xl:ps-12 pe-16 xl:pe-24 text-[11px] xl:text-sm font-medium text-gray-900 bg-gray-50 border border-gray-200 xl:border-2 rounded-lg focus:ring-0 focus:border-blue-600 focus:bg-white dark:bg-gray-900 dark:border-gray-700 dark:placeholder-gray-400 dark:text-white dark:focus:border-blue-500 dark:focus:bg-gray-800 transition-all shadow-sm placeholder:text-gray-500"
-          placeholder='חיפוש לפי מק"ט, תיאור או יצרן...'
+          placeholder='חיפוש לפי מק"ט, תיאור, יצרן או מק"ט יצרן'
           value={searchTerm}
           onChange={handleSearchChange}
           autoComplete="off"

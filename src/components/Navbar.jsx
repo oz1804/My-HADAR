@@ -76,13 +76,7 @@ export default function Navbar({
               onNavigate={handleNavigate} 
             />
 
-            <button
-              onClick={onToggleDarkMode}
-              className="p-1 md:p-2 text-lg md:text-xl rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer shrink-0"
-              title="החלף מצב תצוגה"
-            >
-              {isDarkMode ? '☀️' : '🌙'}
-            </button>
+
 
             <div className="hidden md:flex items-center justify-center border-e-2 border-gray-200 dark:border-gray-600 pe-3 md:pe-5 me-1 shrink-0 min-w-[200px]">
               <DefaultsAndFavorites 
@@ -91,6 +85,16 @@ export default function Navbar({
                 onOpenDefaultsModal={() => setIsDefaultsModalOpen(true)} 
               />
             </div>
+
+
+            
+            <button
+              onClick={onToggleDarkMode}
+              className="p-1 md:p-2 text-lg md:text-xl rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer shrink-0"
+              title="החלף מצב תצוגה"
+            >
+              {isDarkMode ? '☀️' : '🌙'}
+            </button>
 
             <NavLogoutBtn onLogout={onLogout} />
 

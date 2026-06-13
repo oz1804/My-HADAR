@@ -1,11 +1,19 @@
 import React, { useState } from 'react';
 import DocumentsModal from './DocumentsModal';
-import data from '../data/data.json';
+import data from '../../data/data.json';
 
 export default function CheckoutHeader({ 
   cartTotal, 
   headerOrg, 
   onHeaderOrgChange, 
+  
+  headerBuyer,
+  onHeaderBuyerChange,
+  headerRequester,
+  onHeaderRequesterChange,
+  headerServiceApprover,
+  onHeaderServiceApproverChange,
+
   buyerNotes, 
   onHeaderNotesChange, 
   justification, 
@@ -18,7 +26,10 @@ export default function CheckoutHeader({
   headerExpOrgId,
   onHeaderBudgetChange,
   hasExpenseLines,
-  isBudgetMixed // קולט את הדגל מהאב
+  isBudgetMixed,
+  onSaveRequestClick,
+  onApprovalRoutingClick,
+  nextRequisitionNumber
 }) {
   const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
 
@@ -70,7 +81,68 @@ export default function CheckoutHeader({
                 </select>
               )}
             </div>
+
             <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מזמין</label>
+              {headerRequester === 'mixed' ? (
+                <div className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm font-bold text-gray-500 border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
+                  מזמינים שונים
+                </div>
+              ) : (
+                <select 
+                  value={headerRequester || ''}
+                  onChange={(e) => onHeaderRequesterChange(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                >
+                  <option value="">בחר מזמין...</option>
+                  {data.users?.map(u => (
+                    <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מאשר שירות</label>
+              {headerServiceApprover === 'mixed' ? (
+                <div className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm font-bold text-gray-500 border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
+                  מאשרי שירות שונים
+                </div>
+              ) : (
+                <select 
+                  value={headerServiceApprover || ''}
+                  onChange={(e) => onHeaderServiceApproverChange(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                >
+                  <option value="">בחר מאשר שירות...</option>
+                  {data.users?.map(u => (
+                    <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">קניין מומלץ</label>
+              {headerBuyer === 'mixed' ? (
+                <div className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm font-bold text-gray-500 border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
+                  קניינים שונים
+                </div>
+              ) : (
+                <select 
+                  value={headerBuyer || ''}
+                  onChange={(e) => onHeaderBuyerChange(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                >
+                  <option value="">בחר קניין...</option>
+                  {data.buyers?.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">הערות לקניין</label>
               <textarea 
                 rows="2"
@@ -80,7 +152,7 @@ export default function CheckoutHeader({
                 className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none resize-none"
               ></textarea>
             </div>
-            <div>
+            <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">הצדקה</label>
               <textarea 
                 rows="2"
@@ -107,7 +179,6 @@ export default function CheckoutHeader({
           </div>
           
           <div className={`grid grid-cols-1 md:grid-cols-2 ${hasExpenseLines ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-4`}>
-            {/* אם הסעיף התקציבי מעורב - מציגים בלוק יחיד במקום כל התיבות */}
             {isBudgetMixed ? (
               <div className={`col-span-1 md:col-span-2 ${hasExpenseLines ? 'lg:col-span-4' : 'lg:col-span-2'} w-full p-3.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm font-bold text-gray-500 border border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center gap-2`}>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 opacity-70">
@@ -212,7 +283,9 @@ export default function CheckoutHeader({
           <div className="space-y-5">
             <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 p-3.5 rounded-xl border border-gray-100 dark:border-gray-700/50">
               <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">מספר דרישה:</span>
-              <span className="text-sm font-black text-gray-900 dark:text-white tracking-widest font-mono">180000001</span>
+              <span className="text-sm font-black text-gray-900 dark:text-white tracking-widest font-mono">
+                {nextRequisitionNumber}
+              </span>
             </div>
 
             <div>
@@ -235,15 +308,34 @@ export default function CheckoutHeader({
               </div>
             </div>
 
-            <button 
-              onClick={() => setIsDocsModalOpen(true)}
-              className="w-full mt-2 flex items-center justify-center gap-2 py-3 px-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-sm font-bold text-gray-600 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 dark:hover:border-blue-400 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all cursor-pointer group"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-              </svg>
-              הוספת מסמכים ונספחים
-            </button>
+            <div className="flex flex-col gap-2 mt-4">
+              <button 
+                onClick={() => setIsDocsModalOpen(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-sm font-bold text-gray-600 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 dark:hover:border-blue-400 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all cursor-pointer group"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                </svg>
+                הוספת מסמכים ונספחים
+              </button>
+
+              <button 
+                onClick={onSaveRequestClick}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl text-sm font-bold text-gray-800 dark:text-white hover:from-gray-200 hover:to-gray-300 dark:hover:from-gray-600 dark:hover:to-gray-700 transition-all cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" /></svg>
+                שמור דרישה
+              </button>
+
+              <button 
+                onClick={onApprovalRoutingClick}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl text-sm font-black text-white hover:from-blue-700 hover:to-blue-600 shadow-md hover:shadow-lg transition-all cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                העבר לסבב אישורים
+              </button>
+            </div>
+
           </div>
         </div>
       </div>

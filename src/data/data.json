@@ -1,49 +1,199 @@
 {
   "users": [
-    { 
-      "id": 1, 
-      "username": "oz", 
-      "firstName": "עוז", 
-      "gender": "male",
-      "cart": [
-        {
-          "id": 1,
-          "lineNumber": 1,
-          "lineType": "טובין",
-          "destinationType": "Inventory",
-          "itemId": 17,
-          "itemDescription": "כונן קשיח פנימי Samsung 990 PRO 2TB PCIe 4.0 NVMe M.2 SSD",
-          "quantity": 2,
-          "uom": "EA",
-          "unitPrice": 850,
-          "currency": "ILS",
-          "exchangeDate": "",
-          "needByDate": "2026-06-15",
-          "inventoryOrg": 1,
-          "buyer": "B1",
-          "serviceApprover": "manager1",
-          "qualityRequirement": "לא נדרשת ביקורת",
-          "distributions": [
-            {
-              "id": 101,
-              "quantity": 2,
-              "percentage": 100,
-              "rate": 1,
-              "functionalAmount": 1700,
-              "projectId": "",
-              "taskId": "",
-              "expenditureTypeId": "",
-              "expenditureOrgId": 1
-            }
-          ]
-        }
-      ]
-    },
-    { "id": 2, "username": "hadas", "firstName": "הדס", "gender": "female", "cart": [] },
-    { "id": 3, "username": "era", "firstName": "אירה", "gender": "female", "cart": [] },
-    { "id": 4, "username": "rachel", "firstName": "רחל", "gender": "female", "cart": [] },
-    { "id": 5, "username": "moshe", "firstName": "משה", "gender": "male", "cart": [] }
-  ],
+  { 
+    "id": 1, 
+    "username": "oz", 
+    "firstName": "עוז", 
+    "gender": "male",
+    "supervisor": 3,
+    "job": "מיישם",
+    "organizations": [1, 2],
+    "cart": [
+      {
+        "id": 1,
+        "lineNumber": 1,
+        "lineType": "טובין",
+        "destinationType": "Inventory",
+        "itemId": 17,
+        "itemDescription": "כונן קשיח פנימי Samsung 990 PRO 2TB PCIe 4.0 NVMe M.2 SSD",
+        "quantity": 2,
+        "uom": "EA",
+        "unitPrice": 850,
+        "currency": "ILS",
+        "exchangeDate": "",
+        "needByDate": "2026-06-15",
+        "inventoryOrg": 1,
+        "buyer": "B1",
+        "serviceApprover": "manager1",
+        "qualityRequirement": "לא נדרשת ביקורת",
+        "distributions": [
+          {
+            "id": 101,
+            "quantity": 2,
+            "percentage": 100,
+            "rate": 1,
+            "functionalAmount": 1700,
+            "projectId": "",
+            "taskId": "",
+            "expenditureTypeId": "",
+            "expenditureOrgId": 1
+          }
+        ]
+      }
+    ]
+  },
+  { 
+    "id": 2, 
+    "username": "hadas", 
+    "firstName": "הדס", 
+    "gender": "female", 
+    "supervisor": 5,
+    "job": "ראש תחום",
+    "organizations": [11],
+    "cart": [] 
+  },
+  { 
+    "id": 3, 
+    "username": "era", 
+    "firstName": "אירה", 
+    "gender": "female", 
+    "supervisor": 2,
+    "job": "ראש מדור",
+    "organizations": [11],
+    "cart": [] 
+  },
+  { 
+    "id": 4, 
+    "username": "rachel", 
+    "firstName": "רחל", 
+    "gender": "female", 
+    "supervisor": 6,
+    "job": "מתכנתת",
+    "organizations": [11],
+    "cart": [] 
+  },
+  { 
+    "id": 5, 
+    "username": "moshe", 
+    "firstName": "משה ז", 
+    "gender": "male", 
+    "supervisor": 8,
+    "job": "ראש מחלקה",
+    "organizations": [11],
+    "cart": [] 
+  },
+  { 
+    "id": 6, 
+    "username": "nir", 
+    "firstName": "ניר", 
+    "gender": "male", 
+    "supervisor": 7,
+    "job": "ראש תחום",
+    "organizations": [11],
+    "cart": [] 
+  },
+  { 
+    "id": 7, 
+    "username": "oren", 
+    "firstName": "אורן ד",
+    "gender": "male",
+    "supervisor": 8,
+    "job": "ראש מחלקה",
+    "organizations": [11],
+    "cart": [] 
+  },
+  { 
+    "id": 8, 
+    "username": "moshel", 
+    "firstName": "משה ל",
+    "gender": "male",
+    "supervisor": 7,
+    "job": "ראש שטח",
+    "organizations": [11],
+    "cart": [] 
+  },
+  { 
+    "id": 9, 
+    "username": "asaf", 
+    "firstName": "אסף", 
+    "gender": "male",
+    "supervisor": null,
+    "job": "מבט",
+    "organizations": [3,11],
+    "cart": []
+  },
+  { 
+    "id": 10, 
+    "username": "orenm", 
+    "firstName": "אורן מ",
+    "gender": "male",
+    "supervisor": 9,
+    "job": "מבט",
+    "organizations": [3,11],
+    "cart": []
+  },
+  { 
+    "id": 11, 
+    "username": "itay", 
+    "firstName": "איתי",
+    "gender": "male",
+    "supervisor": 9,
+    "job": "מבט",
+    "organizations": [3,11],
+    "cart": []
+  },
+  { 
+    "id": 12, 
+    "username": "aviad", 
+    "firstName": "אביעד",
+    "gender": "male",
+    "supervisor": 9,
+    "job": "מבט",
+    "organizations": [3,11],
+    "cart": []
+  },
+  { 
+    "id": 13, 
+    "username": "adik", 
+    "firstName": "עדי ק",
+    "gender": "male",
+    "supervisor": 9,
+    "job": "מבט",
+    "organizations": [3,11],
+    "cart": []
+  },
+  { 
+    "id": 14, 
+    "username": "adid", 
+    "firstName": "עדי ד",
+    "gender": "female",
+    "supervisor": 7,
+    "job": "מנהל כוב",
+    "organizations": [11],
+    "cart": []
+  },
+  { 
+    "id": 15, 
+    "username": "yefet", 
+    "firstName": "יפת",
+    "gender": "male",
+    "supervisor": 7,
+    "job": "סגן לתפעול",
+    "organizations": [11],
+    "cart": []
+  },
+  { 
+    "id": 16, 
+    "username": "avihay", 
+    "firstName": "אביחי",
+    "gender": "male",
+    "supervisor": null,
+    "job": "מומחה בטיחות",
+    "organizations": [3,11],
+    "cart": []
+  }
+
+],
   "inventoryOrganizations": [
     { "id": 1, "code": "M1", "name": "מנו\"ר" },
     { "id": 2, "code": "39", "name": "מפ\"ה" },
@@ -53,7 +203,8 @@
     { "id": 6, "code": "24", "name": "חימוש 3" },
     { "id": 7, "code": "26", "name": "חימוש 5" },
     { "id": 9, "code": "1B", "name": "חימוש 6" },
-    { "id": 10, "code": "70", "name": "מט\"ל" }
+    { "id": 10, "code": "70", "name": "מט\"ל" },
+    { "id": 11, "code": "C0", "name": "מטכ\"ם" }
   ],
   "buyers": [
     { "id": "B1", "name": "דביר ישראל" },
@@ -101,7 +252,8 @@
     { "id": 6, "name": "240000 - חימוש 3 הנהלה", "startDate": "2020-01-01", "endDate": "2030-12-31" },
     { "id": 7, "name": "260000 - חימוש 5 הנהלה", "startDate": "2020-01-01", "endDate": "2030-12-31" },
     { "id": 9, "name": "1B0000 - חימוש 6 הנהלה", "startDate": "2020-01-01", "endDate": "2030-12-31" },
-    { "id": 10, "name": "700000 - מט\"ל הנהלה", "startDate": "2020-01-01", "endDate": "2030-12-31" }
+    { "id": 10, "name": "700000 - מט\"ל הנהלה", "startDate": "2020-01-01", "endDate": "2030-12-31" },
+    { "id": 11, "name": "C00000 - מטכ\"ם הנהלה", "startDate": "2020-01-01", "endDate": "2030-12-31" }
   ],
   "currencyExchangeRates": [
     { "id": "RATE-001", "date": "2026-05-15", "currency": "USD", "rate": 3.72 },

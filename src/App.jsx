@@ -11,7 +11,7 @@ import PreferredApprovers from './components/PreferredApprovers';
 import FavoriteItems from './components/FavoriteItems';
 import ItemDetails from './components/ItemDetails';
 import SearchResults from './components/SearchResults';
-import Checkout from './components/Checkout';
+import Checkout from './components/Checkout/Checkout';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -19,10 +19,13 @@ function App() {
   const [currentView, setCurrentView] = useState('home'); 
   const [viewPayload, setViewPayload] = useState(null);
   
-  // ניהול ארגון מלאי גלובלי (Session Context)
   const [globalOrg, setGlobalOrg] = useState(1); 
-
   const [cartLines, setCartLines] = useState([]);
+  
+  const [requisitions, setRequisitions] = useState(() => {
+    const stored = localStorage.getItem('appRequisitions');
+    return stored ? JSON.parse(stored) : (data.requisitions || []);
+  });
 
   useEffect(() => {
     if (currentUser) {
@@ -106,7 +109,7 @@ function App() {
       uom: catalogItem.uom || "EA",
       unitPrice: price,
       needByDate: defaultDate, 
-      inventoryOrg: globalOrg, // שימוש בארגון הגלובלי
+      inventoryOrg: globalOrg, 
       buyer: "",
       serviceApprover: "",
       qualityRequirement: "לא נדרשת ביקורת",
@@ -132,16 +135,88 @@ function App() {
     updateCartAndSave(prev => [...prev, newLine]);
   };
 
-  const handleCheckoutSubmit = (headerData, finalLines, emptyCart) => {
-    console.log("הדרישה נשמרת/נשלחת:", { headerData, finalLines });
-    alert("הדרישה עברה ולידציה ונשמרה בהצלחה! (ראה קונסול לנתונים המלאים)");
-    
-    if (emptyCart) {
-      updateCartAndSave([]); 
-      handleNavigate('home');
-    } else {
-      updateCartAndSave(finalLines); 
-    }
+  const handleCheckoutSubmit = (headerData, finalLines, emptyCart, routingSteps = [], status = 'Draft') => {
+    setRequisitions(prev => {
+      const nextId = prev.length > 0 ? Math.max(...prev.map(r => r.id)) + 1 : 1;
+      
+      const reqNum = 180000 + (nextId - 1); 
+      const now = new Date().toISOString();
+
+      const formattedLines = finalLines.map((line, lIndex) => {
+        const lineId = nextId * 1000 + (lIndex + 1);
+        return {
+          id: lineId,
+          requisitionId: nextId,
+          lineNumber: lIndex + 1,
+          lineType: line.lineType,
+          destinationType: line.destinationType,
+          itemId: line.itemId ? Number(line.itemId) : null,
+          itemDescription: line.itemDescription,
+          quantity: Number(line.quantity),
+          uom: line.uom,
+          unitPrice: Number(line.unitPrice),
+          currency: line.currency,
+          exchangeDate: line.exchangeDate,
+          rate: Number(line.rate),
+          needByDate: line.needByDate,
+          inventoryOrg: line.inventoryOrg ? Number(line.inventoryOrg) : null,
+          buyer: line.buyer, 
+          requester: line.requester ? Number(line.requester) : null,
+          serviceApprover: line.serviceApprover ? Number(line.serviceApprover) : null,
+          supplier: line.supplier ? Number(line.supplier) : null,
+          qualityRequirement: line.qualityRequirement,
+          buyerNotes: line.buyerNotes,
+          justification: line.justification,
+          distributions: line.distributions.map((dist, dIndex) => ({
+            id: lineId * 100 + (dIndex + 1),
+            requisitionLineId: lineId,
+            quantity: Number(dist.quantity),
+            percentage: Number(dist.percentage),
+            projectId: dist.projectId ? Number(dist.projectId) : null,
+            taskId: dist.taskId ? Number(dist.taskId) : null,
+            expenditureTypeId: dist.expenditureTypeId ? Number(dist.expenditureTypeId) : null,
+            expenditureOrgId: dist.expenditureOrgId ? Number(dist.expenditureOrgId) : null,
+            functionalAmount: Number(dist.functionalAmount)
+          }))
+        };
+      });
+
+      const newRequisition = {
+        id: nextId,
+        requisitionNumber: String(reqNum), 
+        description: headerData.description || '',
+        creationDate: now,
+        lastUpdateDate: now,
+        creatorId: currentUser.id,
+        total: formattedLines.reduce((sum, item) => sum + (item.unitPrice * item.quantity * item.rate), 0),
+        status: status, 
+        routingSteps: routingSteps,
+        lines: formattedLines
+      };
+
+      const updatedList = [newRequisition, ...prev];
+      localStorage.setItem('appRequisitions', JSON.stringify(updatedList));
+      
+      console.log("====== REQUISITION SAVED SUCCESSFULLY ======");
+      console.log(JSON.stringify(newRequisition, null, 2));
+      console.log("============================================");
+      
+      setTimeout(() => {
+          if (emptyCart) {
+            updateCartAndSave([]); 
+          } else {
+            updateCartAndSave(finalLines);
+          }
+          
+          if (status === 'IN PROCESS') {
+              handleNavigate('success', newRequisition);
+          } else {
+              handleNavigate('home');
+          }
+      }, 0);
+
+      return updatedList;
+    });
   };
 
   if (!currentUser) {
@@ -177,13 +252,60 @@ function App() {
             <p className="text-lg">התחברת בהצלחה בתור <strong dir="ltr">{currentUser.username}</strong>!</p>
           </div>
         )}
+
+        {currentView === 'success' && viewPayload && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-10 mt-12 text-center animate-fade-in max-w-2xl mx-auto border border-gray-100 dark:border-gray-700">
+            <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-10 h-10">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-2">הדרישה נשלחה בהצלחה!</h2>
+            <p className="text-lg text-gray-500 dark:text-gray-400 mb-8">
+              דרישה מספר <span className="font-mono font-bold text-gray-800 dark:text-gray-200">{viewPayload.requisitionNumber}</span> הועברה לסבב אישורים.
+            </p>
+            <button 
+              onClick={() => handleNavigate('home')}
+              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors shadow-md hover:shadow-lg cursor-pointer"
+            >
+              חזרה ללוח הבקרה
+            </button>
+          </div>
+        )}
+
         {currentView === 'requisitions' && <MyRequisitions onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'user-guide' && <UserGuide onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'faq' && <FAQ onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'proc-docs' && <ProcDocs onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'preferred-approvers' && <PreferredApprovers onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'favorite-items' && <FavoriteItems onBackToHome={() => handleNavigate('home')} />}
-        {currentView === 'search-results' && <SearchResults query={viewPayload} onBackToHome={() => handleNavigate('home')} />}
+        {currentView === 'search-results' && (
+  <SearchResults 
+    query={viewPayload} 
+    onBackToHome={() => handleNavigate('home')} 
+    onNavigate={handleNavigate}
+    onAddToCart={(itemId, quantity) => {
+      // אם הפריט כבר קיים בסל, מעדכנים כמות. אם לא, מוסיפים שורה חדשה.
+      const exists = cartLines.find(l => String(l.itemId) === String(itemId));
+      if (exists) {
+        updateLineQty(exists.id, exists.quantity + quantity);
+      } else {
+        addNewLine(itemId); // הפונקציה הקיימת שלך ב-App.jsx שמטפלת בהוספה
+      }
+      alert("הפריט נוסף לסל בהצלחה!"); // או הודעת Toast נחמדה
+    }}
+    onQuickOrder={(itemId, quantity) => {
+      const exists = cartLines.find(l => String(l.itemId) === String(itemId));
+      if (exists) {
+        updateLineQty(exists.id, exists.quantity + quantity);
+      } else {
+        addNewLine(itemId);
+      }
+      handleNavigate('checkout'); // מעביר ישירות לקופה
+    }}
+    favoriteItems={[]} // בהמשך נוכל לחבר פה את ה-State של המועדפים
+  />
+)}
         
         {currentView === 'item-details' && (
           <ItemDetails 
@@ -202,7 +324,8 @@ function App() {
             globalOrg={globalOrg}
             onBack={() => handleNavigate('home')}
             onSubmit={handleCheckoutSubmit}
-            onRemoveFromCart={(id) => updateLineQty(id, 0)} /* התווסף: מעדכן את העגלה הראשית שמסירים את השורה */
+            onRemoveFromCart={(id) => updateLineQty(id, 0)} 
+            nextRequisitionNumber={String(180000 + (requisitions.length > 0 ? Math.max(...requisitions.map(r => r.id)) : 0))}
           />
         )}
       </main>

@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import CheckoutHeader from './CheckoutHeader';
-import CheckoutLines from './CheckoutLines';
-import data from '../data/data.json';
+import { useState, useEffect } from 'react';
+import data from '../../data/data.json';
 
-export default function Checkout({ cartLines = [], currentUser, globalOrg, onBack, onSubmit, onRemoveFromCart }) {
+export default function useCheckout({ cartLines = [], globalOrg, onRemoveFromCart, currentUser }) {
   const [headerOrg, setHeaderOrg] = useState(String(globalOrg));
   const [buyerNotes, setBuyerNotes] = useState('');
   const [justification, setJustification] = useState('');
@@ -13,6 +11,11 @@ export default function Checkout({ cartLines = [], currentUser, globalOrg, onBac
   const [headerTaskId, setHeaderTaskId] = useState('');
   const [headerExpTypeId, setHeaderExpTypeId] = useState('');
   const [headerExpOrgId, setHeaderExpOrgId] = useState('');
+
+  // --- סטייטים חדשים עבור קניין, מזמין ומאשר שירות ברמת הכותרת ---
+  const [headerBuyer, setHeaderBuyer] = useState('');
+  const [headerRequester, setHeaderRequester] = useState('');
+  const [headerServiceApprover, setHeaderServiceApprover] = useState(currentUser?.firstName || '');
 
   const [lines, setLines] = useState([]);
   const [selectedLineIds, setSelectedLineIds] = useState([]);
@@ -80,6 +83,9 @@ export default function Checkout({ cartLines = [], currentUser, globalOrg, onBac
             buyerNotes: line.buyerNotes || "",
             justification: line.justification || "",
             needByDate: defaultDate,
+            buyer: line.buyer || "",
+            requester: line.requester || "", 
+            serviceApprover: line.serviceApprover || "", 
             distributions: lineDistributions
           };
         });
@@ -89,13 +95,31 @@ export default function Checkout({ cartLines = [], currentUser, globalOrg, onBac
     }
   }, [cartLines, globalOrg]);
 
+  // בדיקת מצב מעורב (Mixed) עבור ארגון מלאי, תקציב, קניינים, מזמינים ומאשרי שירות
   useEffect(() => {
     if (lines.length === 0) return;
     
+    // בדיקת ארגון מלאי
     const firstOrg = String(lines[0].inventoryOrg);
     const isAllSameOrg = lines.every(line => String(line.inventoryOrg) === firstOrg);
     setHeaderOrg(isAllSameOrg ? firstOrg : 'mixed');
 
+    // --- בדיקת קניין מעורב ---
+    const firstBuyer = String(lines[0].buyer || '');
+    const isAllSameBuyer = lines.every(line => String(line.buyer || '') === firstBuyer);
+    setHeaderBuyer(isAllSameBuyer ? firstBuyer : 'mixed');
+
+    // --- בדיקת מזמין מעורב ---
+    const firstRequester = String(lines[0].requester || '');
+    const isAllSameRequester = lines.every(line => String(line.requester || '') === firstRequester);
+    setHeaderRequester(isAllSameRequester ? firstRequester : 'mixed');
+
+    // --- בדיקת מאשר שירות מעורב ---
+    const firstServiceApprover = String(lines[0].serviceApprover || '');
+    const isAllSameServiceApprover = lines.every(line => String(line.serviceApprover || '') === firstServiceApprover);
+    setHeaderServiceApprover(isAllSameServiceApprover ? firstServiceApprover : 'mixed');
+
+    // בדיקת תקציב מעורב
     let allDists = [];
     lines.forEach(l => {
       if (l.distributions) allDists.push(...l.distributions);
@@ -232,15 +256,17 @@ export default function Checkout({ cartLines = [], currentUser, globalOrg, onBac
       rate: calculatedRate,
       foreignUnitPrice: 0,
       inventoryOrg: currentInvOrg,
-      buyerNotes: buyerNotes || "",
-      justification: justification || "",
+      buyerNotes: newLineData.buyerNotes !== undefined ? newLineData.buyerNotes : (buyerNotes || ""),
+      justification: newLineData.justification !== undefined ? newLineData.justification : (justification || ""),
       needByDate: newLineData.needByDate,
       supplier: newLineData.supplier || "",
       qualityRequirement: newLineData.qualityRequirement || "",
+      
+      // קליטת קניין, מזמין ומאשר שירות מהשורה המהירה
       serviceApprover: newLineData.serviceApprover || "",
       buyer: newLineData.buyer || "",
+      requester: newLineData.requester || "",
       
-      // קולט את כל מערך הפיצולים מהשורה המהירה
       distributions: newLineData.distributions.map(dist => ({
         id: Date.now() + Math.random(),
         quantity: dist.quantity,
@@ -264,6 +290,28 @@ export default function Checkout({ cartLines = [], currentUser, globalOrg, onBac
         inventoryOrg: Number(orgId),
         distributions: (line.distributions || []).map(d => ({ ...d, expenditureOrgId: Number(orgId) }))
       })));
+    }
+  };
+
+  // --- פונקציות חלחול ---
+  const handleHeaderBuyerChange = (buyerId) => {
+    setHeaderBuyer(buyerId);
+    if (buyerId !== 'mixed') {
+      setLines(prevLines => prevLines.map(line => ({ ...line, buyer: buyerId })));
+    }
+  };
+
+  const handleHeaderRequesterChange = (requesterId) => {
+    setHeaderRequester(requesterId);
+    if (requesterId !== 'mixed') {
+      setLines(prevLines => prevLines.map(line => ({ ...line, requester: requesterId })));
+    }
+  };
+
+  const handleHeaderServiceApproverChange = (approverId) => {
+    setHeaderServiceApprover(approverId);
+    if (approverId !== 'mixed') {
+      setLines(prevLines => prevLines.map(line => ({ ...line, serviceApprover: approverId })));
     }
   };
 
@@ -372,56 +420,39 @@ export default function Checkout({ cartLines = [], currentUser, globalOrg, onBac
   const cartTotal = lines.reduce((sum, item) => sum + ((item.unitPrice || 0) * item.quantity * (item.rate || 1)), 0);
   const hasExpenseLines = lines.some(line => line.destinationType === 'Expense');
 
-  return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-6 w-full" dir="rtl">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">סל דרישה מורחב</h1>
-        <button onClick={onBack} className="text-sm font-semibold text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
-          &larr; חזרה לאתר
-        </button>
-      </div>
-      
-      <CheckoutHeader 
-        cartTotal={cartTotal}
-        headerOrg={headerOrg}
-        onHeaderOrgChange={handleHeaderOrgChange}
-        buyerNotes={buyerNotes}
-        onHeaderNotesChange={handleHeaderNotesChange}
-        justification={justification}
-        onHeaderJustificationChange={handleHeaderJustificationChange}
-        headerDescription={headerDescription}
-        setHeaderDescription={setHeaderDescription}
-        headerProjectId={headerProjectId}
-        headerTaskId={headerTaskId}
-        headerExpTypeId={headerExpTypeId}
-        headerExpOrgId={headerExpOrgId}
-        onHeaderBudgetChange={handleHeaderBudgetChange}
-        hasExpenseLines={hasExpenseLines}
-        isBudgetMixed={isBudgetMixed}
-      />
-      
-      <div className="mt-8">
-        <CheckoutLines 
-          lines={lines}
-          selectedLineIds={selectedLineIds}
-          setSelectedLineIds={setSelectedLineIds}
-          onLineOrgChange={handleLineOrgChange}
-          onLineFieldChange={handleLineFieldChange}
-          onRemoveLine={handleRemoveLine} 
-          currentUser={currentUser}
-          onAddDist={handleAddDist}
-          onDistFieldChange={handleDistFieldChange}
-          onRemoveDist={handleRemoveDist}
-          onApplyBulkEdit={handleApplyBulkEdit}
-          onAddNewLine={handleAddNewLine}
-          headerProjectId={headerProjectId}
-          headerTaskId={headerTaskId}
-          headerExpTypeId={headerExpTypeId}
-          headerExpOrgId={headerExpOrgId}
-          isBudgetMixed={isBudgetMixed}
-          headerOrg={headerOrg}
-        />
-      </div>
-    </div>
-  );
+  return {
+    headerOrg, setHeaderOrg,
+    buyerNotes, setBuyerNotes,
+    justification, setJustification,
+    headerDescription, setHeaderDescription,
+    headerProjectId, setHeaderProjectId,
+    headerTaskId, setHeaderTaskId,
+    headerExpTypeId, setHeaderExpTypeId,
+    headerExpOrgId, setHeaderExpOrgId,
+    headerBuyer, setHeaderBuyer,             
+    headerRequester, setHeaderRequester,     
+    headerServiceApprover, setHeaderServiceApprover, // ייצוא הסטייט החדש
+    lines, setLines,
+    selectedLineIds, setSelectedLineIds,
+    isBudgetMixed, setIsBudgetMixed,
+    cartTotal,
+    hasExpenseLines,
+    
+    // Functions
+    handleLineFieldChange,
+    handleApplyBulkEdit,
+    handleAddNewLine,
+    handleHeaderOrgChange,
+    handleHeaderBuyerChange,         
+    handleHeaderRequesterChange,     
+    handleHeaderServiceApproverChange, // ייצוא פונקציית החלחול החדשה
+    handleHeaderBudgetChange,
+    handleHeaderNotesChange,
+    handleHeaderJustificationChange,
+    handleLineOrgChange,
+    handleRemoveLine,
+    handleAddDist,
+    handleDistFieldChange,
+    handleRemoveDist
+  };
 }
