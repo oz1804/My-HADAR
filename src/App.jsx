@@ -89,7 +89,8 @@ function App() {
     });
   };
 
-  const addNewLine = (itemId) => {
+  // התיקון הקריטי: קליטת initialQty והזנתו לשורה ולסכום המחושב (functionalAmount)
+  const addNewLine = (itemId, initialQty = 1, customDate = null) => {
     const catalogItem = data.catalogItems.find(i => String(i.id) === String(itemId));
     
     const d = new Date();
@@ -105,10 +106,10 @@ function App() {
       itemId: catalogItem.id,
       sku: catalogItem.sku,
       itemDescription: catalogItem.description,
-      quantity: 1,
+      quantity: initialQty, 
       uom: catalogItem.uom || "EA",
       unitPrice: price,
-      needByDate: defaultDate, 
+      needByDate: customDate || defaultDate, 
       inventoryOrg: globalOrg, 
       buyer: "",
       serviceApprover: "",
@@ -118,12 +119,12 @@ function App() {
       distributions: [
         {
           id: Date.now() + 1, 
-          quantity: 1, 
+          quantity: initialQty, 
           percentage: 100, 
           currency: 'ILS', 
           exchangeDate: '', 
           rate: 1, 
-          functionalAmount: price,
+          functionalAmount: price * initialQty, 
           projectId: '', 
           taskId: '', 
           expenditureTypeId: '', 
@@ -138,7 +139,6 @@ function App() {
   const handleCheckoutSubmit = (headerData, finalLines, emptyCart, routingSteps = [], status = 'Draft') => {
     setRequisitions(prev => {
       const nextId = prev.length > 0 ? Math.max(...prev.map(r => r.id)) + 1 : 1;
-      
       const reqNum = 180000 + (nextId - 1); 
       const now = new Date().toISOString();
 
@@ -183,7 +183,7 @@ function App() {
 
       const newRequisition = {
         id: nextId,
-        requisitionNumber: String(reqNum), 
+        requisitionNumber: String(reqNum),
         description: headerData.description || '',
         creationDate: now,
         lastUpdateDate: now,
@@ -279,33 +279,34 @@ function App() {
         {currentView === 'proc-docs' && <ProcDocs onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'preferred-approvers' && <PreferredApprovers onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'favorite-items' && <FavoriteItems onBackToHome={() => handleNavigate('home')} />}
+        
+        {/* עדכון הקריאה למסך חיפוש כדי להעביר את הכמות מהכרטיסיות והשורות */}
         {currentView === 'search-results' && (
-  <SearchResults 
-    query={viewPayload} 
-    onBackToHome={() => handleNavigate('home')} 
-    onNavigate={handleNavigate}
-    onAddToCart={(itemId, quantity) => {
-      // אם הפריט כבר קיים בסל, מעדכנים כמות. אם לא, מוסיפים שורה חדשה.
-      const exists = cartLines.find(l => String(l.itemId) === String(itemId));
-      if (exists) {
-        updateLineQty(exists.id, exists.quantity + quantity);
-      } else {
-        addNewLine(itemId); // הפונקציה הקיימת שלך ב-App.jsx שמטפלת בהוספה
-      }
-      alert("הפריט נוסף לסל בהצלחה!"); // או הודעת Toast נחמדה
-    }}
-    onQuickOrder={(itemId, quantity) => {
-      const exists = cartLines.find(l => String(l.itemId) === String(itemId));
-      if (exists) {
-        updateLineQty(exists.id, exists.quantity + quantity);
-      } else {
-        addNewLine(itemId);
-      }
-      handleNavigate('checkout'); // מעביר ישירות לקופה
-    }}
-    favoriteItems={[]} // בהמשך נוכל לחבר פה את ה-State של המועדפים
-  />
-)}
+          <SearchResults 
+            query={viewPayload} 
+            onBackToHome={() => handleNavigate('home')} 
+            onNavigate={handleNavigate}
+            onAddToCart={(itemId, quantity) => {
+              const existingLine = cartLines.find(line => String(line.itemId) === String(itemId));
+              if (existingLine) {
+                updateLineQty(existingLine.id, existingLine.quantity + quantity);
+              } else {
+                addNewLine(itemId, quantity); 
+              }
+              alert("הפריט נוסף לסל בהצלחה!");
+            }}
+            onQuickOrder={(itemId, quantity) => {
+              const existingLine = cartLines.find(line => String(line.itemId) === String(itemId));
+              if (existingLine) {
+                updateLineQty(existingLine.id, existingLine.quantity + quantity);
+              } else {
+                addNewLine(itemId, quantity);
+              }
+              handleNavigate('checkout');
+            }}
+            favoriteItems={[]}
+          />
+        )}
         
         {currentView === 'item-details' && (
           <ItemDetails 
@@ -314,6 +315,7 @@ function App() {
             cartLines={cartLines}
             onUpdateQty={updateLineQty}
             onAddNewLine={addNewLine}
+            onNavigate={handleNavigate}
           />
         )}
 
