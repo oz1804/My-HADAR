@@ -320,7 +320,7 @@ export default function CheckoutLineRow({
               <div className="flex flex-col gap-1 lg:col-span-1">
                 <label className="text-[11px] font-semibold text-gray-500">מאשר שירות</label>
                 <select 
-                  value={line.serviceApprover || currentUser?.id || ''}
+                  value={line.serviceApprover || ''}
                   onChange={(e) => onLineFieldChange(line.id, 'serviceApprover', e.target.value)}
                   className="p-1.5 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 >

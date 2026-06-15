@@ -12,6 +12,7 @@ import FavoriteItems from './components/FavoriteItems';
 import ItemDetails from './components/ItemDetails';
 import SearchResults from './components/SearchResults';
 import Checkout from './components/Checkout/Checkout';
+import NonCatalogModal from './components/NonCatalogModal'; // הייבוא החדש של המודל
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -21,6 +22,9 @@ function App() {
   
   const [globalOrg, setGlobalOrg] = useState(1); 
   const [cartLines, setCartLines] = useState([]);
+
+  // הסטייט לניהול פתיחת המודל של פריט חופשי
+  const [isNonCatalogOpen, setIsNonCatalogOpen] = useState(false);
   
   const [requisitions, setRequisitions] = useState(() => {
     const stored = localStorage.getItem('appRequisitions');
@@ -89,7 +93,7 @@ function App() {
     });
   };
 
-  // התיקון הקריטי: קליטת initialQty והזנתו לשורה ולסכום המחושב (functionalAmount)
+  // 1. הפונקציה להוספת פריט קטלוגי רגיל (כמו שהייתה)
   const addNewLine = (itemId, initialQty = 1, customDate = null) => {
     const catalogItem = data.catalogItems.find(i => String(i.id) === String(itemId));
     
@@ -125,6 +129,56 @@ function App() {
           exchangeDate: '', 
           rate: 1, 
           functionalAmount: price * initialQty, 
+          projectId: '', 
+          taskId: '', 
+          expenditureTypeId: '', 
+          expenditureOrgId: '' 
+        }
+      ]
+    };
+    
+    updateCartAndSave(prev => [...prev, newLine]);
+  };
+
+  // 2. הפונקציה החדשה להוספת פריט חופשי (Non-Catalog) מהמודל
+  const addNonCatalogLine = (lineData) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    const defaultDate = d.toISOString().split('T')[0];
+    
+    const rate = lineData.rate || 1;
+
+    const newLine = {
+      id: Date.now(),
+      lineNumber: cartLines.length + 1,
+      lineType: lineData.lineType,
+      destinationType: lineData.destinationType,
+      itemId: null, // אין מזהה מערכת
+      sku: "פריט חופשי", // מק"ט וירטואלי
+      itemDescription: lineData.description,
+      quantity: lineData.quantity,
+      uom: lineData.uom,
+      unitPrice: lineData.unitPrice,
+      currency: lineData.currency,
+      exchangeDate: lineData.exchangeDate,
+      rate: rate,
+      needByDate: defaultDate, 
+      inventoryOrg: lineData.lineType === 'שירות' ? null : globalOrg, 
+      buyer: lineData.buyer || "",
+      requester: lineData.requester || currentUser.id,
+      serviceApprover: lineData.serviceApprover || "",
+      qualityRequirement: "לא נדרשת ביקורת",
+      justification: "",
+      buyerNotes: "",
+      distributions: [
+        {
+          id: Date.now() + 1, 
+          quantity: lineData.quantity, 
+          percentage: 100, 
+          currency: lineData.currency, 
+          exchangeDate: lineData.exchangeDate, 
+          rate: rate, 
+          functionalAmount: lineData.unitPrice * lineData.quantity * rate, // המרה למטבע המקומי
           projectId: '', 
           taskId: '', 
           expenditureTypeId: '', 
@@ -243,6 +297,7 @@ function App() {
         onUpdateQty={updateLineQty}
         globalOrg={globalOrg}
         setGlobalOrg={setGlobalOrg}
+        onOpenNonCatalog={() => setIsNonCatalogOpen(true)} // העברנו את הפקודה לפתיחת המודל
       />
       
       <main className="p-6 max-w-7xl mx-auto">
@@ -280,7 +335,6 @@ function App() {
         {currentView === 'preferred-approvers' && <PreferredApprovers onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'favorite-items' && <FavoriteItems onBackToHome={() => handleNavigate('home')} />}
         
-        {/* עדכון הקריאה למסך חיפוש כדי להעביר את הכמות מהכרטיסיות והשורות */}
         {currentView === 'search-results' && (
           <SearchResults 
             query={viewPayload} 
@@ -328,9 +382,59 @@ function App() {
             onSubmit={handleCheckoutSubmit}
             onRemoveFromCart={(id) => updateLineQty(id, 0)} 
             nextRequisitionNumber={String(180000 + (requisitions.length > 0 ? Math.max(...requisitions.map(r => r.id)) : 0))}
+            
+            // --- זו הפונקציה שדוחפת את המידע שחזר מהקופה ישירות ל-Navbar ---
+            onAddLineToCart={(newLineData) => {
+              const newLine = {
+                id: Date.now(),
+                lineNumber: cartLines.length + 1,
+                lineType: newLineData.lineType,
+                destinationType: newLineData.destinationType,
+                itemId: newLineData.itemId,
+                sku: newLineData.sku,
+                itemDescription: newLineData.itemDescription,
+                quantity: newLineData.quantity,
+                uom: newLineData.uom,
+                unitPrice: newLineData.unitPrice,
+                currency: newLineData.currency,
+                exchangeDate: newLineData.exchangeDate,
+                rate: newLineData.rate || 1,
+                needByDate: newLineData.needByDate,
+                inventoryOrg: newLineData.inventoryOrg,
+                buyer: newLineData.buyer,
+                requester: newLineData.requester,
+                serviceApprover: newLineData.serviceApprover,
+                supplier: newLineData.supplier,
+                qualityRequirement: newLineData.qualityRequirement,
+                justification: newLineData.justification,
+                buyerNotes: newLineData.buyerNotes,
+                distributions: newLineData.distributions.map(d => ({
+                  ...d,
+                  id: d.id || Date.now() + Math.random(),
+                  functionalAmount: (newLineData.unitPrice || 0) * d.quantity * (newLineData.rate || 1)
+                }))
+              };
+              updateCartAndSave(prev => [...prev, newLine]);
+            }}
           />
         )}
       </main>
+
+      {/* הרינדור הגלובלי של מודל ה-NonCatalog */}
+      <NonCatalogModal 
+        isOpen={isNonCatalogOpen}
+        onClose={() => setIsNonCatalogOpen(false)}
+        currentUser={currentUser}
+        onAddToCart={(data) => {
+          addNonCatalogLine(data);
+          alert("פריט חופשי נוסף לסל בהצלחה!");
+        }}
+        onQuickOrder={(data) => {
+          addNonCatalogLine(data);
+          handleNavigate('checkout');
+        }}
+      />
+
     </div>
   );
 }

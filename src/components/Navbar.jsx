@@ -6,25 +6,23 @@ import NavNikraLink from './NavNikraLink';
 import NavNonCatalogBtn from './NavNonCatalogBtn';
 import NavUserReq from './NavUserReq';
 import KnowledgeAndProcDocs from './KnowledgeAndProcDocs';
-import NonCatalogModal from './NonCatalogModal';
 import DefaultsAndFavorites from './DefaultsAndFavorites';
 import DefaultsModal from './DefaultsModal';
 import NavLogoutBtn from './NavLogoutBtn';
 import NavCart from './NavCart';
 
-// 1. הוספנו את הפרופס של העגלה ושל ארגון המלאי לחתימה
 export default function Navbar({ 
   currentUser, 
   onLogout, 
   isDarkMode, 
   onToggleDarkMode, 
   onNavigate,
-  cartLines,      // <--- תוספת
-  onUpdateQty,    // <--- תוספת
-  globalOrg,      // <--- תוספת
-  setGlobalOrg    // <--- תוספת
+  cartLines,      
+  onUpdateQty,    
+  globalOrg,      
+  setGlobalOrg,
+  onOpenNonCatalog // <--- הפרופ החדש מ-App.jsx שפותח את המודל הגלובלי
 }) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDefaultsModalOpen, setIsDefaultsModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -47,13 +45,14 @@ export default function Navbar({
             <div className="hidden md:block w-px h-8 bg-gray-200 dark:bg-gray-700 shrink-0"></div>
 
             <div className="shrink-0">
-              {/* אפשר גם להעביר את globalOrg ו-setGlobalOrg לכאן אם NavOrg משתמש בהם */}
               <NavOrg />
             </div>
 
             <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
               <NavSearch onNavigate={handleNavigate} />
-              <NavNonCatalogBtn onOpenModal={() => setIsModalOpen(true)} />
+              
+              {/* חיבור הלחצן לפונקציה הגלובלית במקום לסטייט המקומי */}
+              <NavNonCatalogBtn onOpenModal={onOpenNonCatalog} />
 
               <div className="hidden 2xl:flex items-center gap-4 shrink-0 ms-2">
                  <NavUserReq onNavigate={() => handleNavigate('requisitions')} />
@@ -69,14 +68,11 @@ export default function Navbar({
 
             <div className="hidden md:block w-px h-6 bg-gray-200 dark:bg-gray-700 shrink-0"></div>
 
-            {/* 2. הנה התיקון המשמעותי: מעבירים את המידע ל-NavCart */}
             <NavCart 
               cartLines={cartLines} 
               onUpdateQty={onUpdateQty} 
               onNavigate={handleNavigate} 
             />
-
-
 
             <div className="hidden md:flex items-center justify-center border-e-2 border-gray-200 dark:border-gray-600 pe-3 md:pe-5 me-1 shrink-0 min-w-[200px]">
               <DefaultsAndFavorites 
@@ -86,8 +82,6 @@ export default function Navbar({
               />
             </div>
 
-
-            
             <button
               onClick={onToggleDarkMode}
               className="p-1 md:p-2 text-lg md:text-xl rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer shrink-0"
@@ -147,7 +141,7 @@ export default function Navbar({
         </div>
       </header>
 
-      <NonCatalogModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {/* שמנו פה רק את המודל של ברירות המחדל. ה-NonCatalogModal מנוהל ב-App.jsx */}
       <DefaultsModal isOpen={isDefaultsModalOpen} onClose={() => setIsDefaultsModalOpen(false)} />
     </>
   );
