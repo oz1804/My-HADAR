@@ -6,7 +6,6 @@ export default function ItemDetails({ itemId, onBack, cartLines, onUpdateQty, on
   const [isFavorite, setIsFavorite] = useState(false);
   const [quantity, setQuantity] = useState(1);
 
-  // בדיקה דינמית: האם הפריט כבר קיים בסל כרגע?
   const isItemInCart = cartLines.some(line => String(line.itemId) === String(item?.id));
 
   if (!item) {
@@ -31,28 +30,22 @@ export default function ItemDetails({ itemId, onBack, cartLines, onUpdateQty, on
     if (qty > 0) setQuantity(qty);
   };
 
-  // פעולה עבור פריט שעוד לא קיים בסל
   const handleAddToCart = () => {
-    onAddNewLine(item.id, quantity); // <-- הוספת הכמות
-    setQuantity(1); // איפוס כמות ל-1
-    alert("הפריט נוסף לסל בהצלחה!");
+    onAddNewLine(item.id, quantity);
+    setQuantity(1);
   };
 
-  // פעולה עבור פריט שכבר קיים בסל (כפתור שורה נפרדת)
   const handleSeparateLine = () => {
-    onAddNewLine(item.id, quantity); // <-- הוספת הכמות
-    setQuantity(1); // איפוס כמות ל-1
-    alert("הפריט נוסף כשורה נפרדת חדשה בהצלחה!");
+    onAddNewLine(item.id, quantity);
+    setQuantity(1);
   };
 
-  // הזמנה מהירה (הוספה ומעבר לקופה)
   const handleQuickOrder = () => {
     if (isItemInCart) {
-      // אם כבר בסל, נגדיל את הכמות של השורה הקיימת למען הנוחות של ההזמנה המהירה
       const existingLine = cartLines.find(line => String(line.itemId) === String(item.id));
       onUpdateQty(existingLine.id, existingLine.quantity + quantity);
     } else {
-      onAddNewLine(item.id, quantity); // <-- הוספת הכמות
+      onAddNewLine(item.id, quantity);
     }
     if (onNavigate) {
       onNavigate('checkout');
@@ -134,7 +127,6 @@ export default function ItemDetails({ itemId, onBack, cartLines, onUpdateQty, on
 
           <div className="border-t border-gray-100 dark:border-gray-700 pt-6 flex flex-col gap-4 max-w-md">
 
-            {/* בורר כמות מעוצב */}
             <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-2xl border border-gray-200 dark:border-gray-700">
               <label className="text-xs font-black text-gray-500 dark:text-gray-400 px-2 uppercase">כמות</label>
               <div className="flex items-center gap-2">
@@ -144,7 +136,6 @@ export default function ItemDetails({ itemId, onBack, cartLines, onUpdateQty, on
               </div>
             </div>
 
-            {/* --- אזור הכפתורים המתחלף (הוסף לסל / שורה נפרדת) --- */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
               
               {!isItemInCart ? (

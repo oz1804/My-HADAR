@@ -12,7 +12,7 @@ import FavoriteItems from './components/FavoriteItems';
 import ItemDetails from './components/ItemDetails';
 import SearchResults from './components/SearchResults';
 import Checkout from './components/Checkout/Checkout';
-import NonCatalogModal from './components/NonCatalogModal'; // הייבוא החדש של המודל
+import NonCatalogModal from './components/NonCatalogModal';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -22,10 +22,19 @@ function App() {
   
   const [globalOrg, setGlobalOrg] = useState(1); 
   const [cartLines, setCartLines] = useState([]);
-
-  // הסטייט לניהול פתיחת המודל של פריט חופשי
   const [isNonCatalogOpen, setIsNonCatalogOpen] = useState(false);
   
+  // --- מערכת Toast גלובלית ואלגנטית ---
+  const [toast, setToast] = useState({ show: false, message: '' });
+
+  const showToast = (message) => {
+    setToast({ show: true, message });
+    setTimeout(() => {
+      setToast({ show: false, message: '' });
+    }, 3000);
+  };
+  // -------------------------------------
+
   const [requisitions, setRequisitions] = useState(() => {
     const stored = localStorage.getItem('appRequisitions');
     return stored ? JSON.parse(stored) : (data.requisitions || []);
@@ -93,7 +102,6 @@ function App() {
     });
   };
 
-  // 1. הפונקציה להוספת פריט קטלוגי רגיל (כמו שהייתה)
   const addNewLine = (itemId, initialQty = 1, customDate = null) => {
     const catalogItem = data.catalogItems.find(i => String(i.id) === String(itemId));
     
@@ -138,9 +146,9 @@ function App() {
     };
     
     updateCartAndSave(prev => [...prev, newLine]);
+    showToast('הפריט נוסף לסל בהצלחה!'); // <-- הודעת ה-Toast במקום alert
   };
 
-  // 2. הפונקציה החדשה להוספת פריט חופשי (Non-Catalog) מהמודל
   const addNonCatalogLine = (lineData) => {
     const d = new Date();
     d.setMonth(d.getMonth() + 1);
@@ -153,8 +161,8 @@ function App() {
       lineNumber: cartLines.length + 1,
       lineType: lineData.lineType,
       destinationType: lineData.destinationType,
-      itemId: null, // אין מזהה מערכת
-      sku: "פריט חופשי", // מק"ט וירטואלי
+      itemId: null,
+      sku: "פריט חופשי",
       itemDescription: lineData.description,
       quantity: lineData.quantity,
       uom: lineData.uom,
@@ -178,7 +186,7 @@ function App() {
           currency: lineData.currency, 
           exchangeDate: lineData.exchangeDate, 
           rate: rate, 
-          functionalAmount: lineData.unitPrice * lineData.quantity * rate, // המרה למטבע המקומי
+          functionalAmount: lineData.unitPrice * lineData.quantity * rate,
           projectId: '', 
           taskId: '', 
           expenditureTypeId: '', 
@@ -188,6 +196,7 @@ function App() {
     };
     
     updateCartAndSave(prev => [...prev, newLine]);
+    showToast('פריט חופשי נוסף לסל בהצלחה!'); // <-- הודעת ה-Toast במקום alert
   };
 
   const handleCheckoutSubmit = (headerData, finalLines, emptyCart, routingSteps = [], status = 'Draft') => {
@@ -251,10 +260,6 @@ function App() {
       const updatedList = [newRequisition, ...prev];
       localStorage.setItem('appRequisitions', JSON.stringify(updatedList));
       
-      console.log("====== REQUISITION SAVED SUCCESSFULLY ======");
-      console.log(JSON.stringify(newRequisition, null, 2));
-      console.log("============================================");
-      
       setTimeout(() => {
           if (emptyCart) {
             updateCartAndSave([]); 
@@ -285,7 +290,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-300" dir="rtl">
+    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-300 relative" dir="rtl">
       
       <Navbar 
         currentUser={currentUser} 
@@ -297,10 +302,10 @@ function App() {
         onUpdateQty={updateLineQty}
         globalOrg={globalOrg}
         setGlobalOrg={setGlobalOrg}
-        onOpenNonCatalog={() => setIsNonCatalogOpen(true)} // העברנו את הפקודה לפתיחת המודל
+        onOpenNonCatalog={() => setIsNonCatalogOpen(true)}
       />
       
-      <main className="p-6 max-w-7xl mx-auto">
+      <main className="p-6 max-w-7xl mx-auto pb-24">
         {currentView === 'home' && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-8 mt-6">
             <h2 className="text-2xl font-semibold mb-4 border-b pb-4 border-gray-100 dark:border-gray-700">לוח בקרה</h2>
@@ -344,10 +349,10 @@ function App() {
               const existingLine = cartLines.find(line => String(line.itemId) === String(itemId));
               if (existingLine) {
                 updateLineQty(existingLine.id, existingLine.quantity + quantity);
+                showToast('כמות הפריט עודכנה בסל בהצלחה!');
               } else {
                 addNewLine(itemId, quantity); 
               }
-              alert("הפריט נוסף לסל בהצלחה!");
             }}
             onQuickOrder={(itemId, quantity) => {
               const existingLine = cartLines.find(line => String(line.itemId) === String(itemId));
@@ -382,8 +387,6 @@ function App() {
             onSubmit={handleCheckoutSubmit}
             onRemoveFromCart={(id) => updateLineQty(id, 0)} 
             nextRequisitionNumber={String(180000 + (requisitions.length > 0 ? Math.max(...requisitions.map(r => r.id)) : 0))}
-            
-            // --- זו הפונקציה שדוחפת את המידע שחזר מהקופה ישירות ל-Navbar ---
             onAddLineToCart={(newLineData) => {
               const newLine = {
                 id: Date.now(),
@@ -415,25 +418,36 @@ function App() {
                 }))
               };
               updateCartAndSave(prev => [...prev, newLine]);
+              showToast('השורה נוספה לסל בהצלחה!');
             }}
           />
         )}
       </main>
 
-      {/* הרינדור הגלובלי של מודל ה-NonCatalog */}
       <NonCatalogModal 
         isOpen={isNonCatalogOpen}
         onClose={() => setIsNonCatalogOpen(false)}
         currentUser={currentUser}
         onAddToCart={(data) => {
           addNonCatalogLine(data);
-          alert("פריט חופשי נוסף לסל בהצלחה!");
         }}
         onQuickOrder={(data) => {
           addNonCatalogLine(data);
           handleNavigate('checkout');
         }}
       />
+
+      {/* --- באנר ה-Toast הגלובלי --- */}
+      <div 
+        className={`fixed bottom-6 left-6 z-[200] bg-gray-900 dark:bg-gray-800 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border border-gray-700 transition-all duration-300 transform ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}
+      >
+        <div className="bg-emerald-500/20 text-emerald-400 p-1.5 rounded-xl">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+        </div>
+        <span className="font-bold text-sm">{toast.message}</span>
+      </div>
 
     </div>
   );
