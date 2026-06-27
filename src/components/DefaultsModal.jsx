@@ -10,14 +10,15 @@ export default function DefaultsModal({
   setGlobalDestType,
   globalSubInv,      
   setGlobalSubInv,
-  globalProject,     // <--- הכנה לשלב הבא
-  setGlobalProject,  // <--- הכנה לשלב הבא
-  globalTask,        // <--- הכנה לשלב הבא
-  setGlobalTask,     // <--- הכנה לשלב הבא
-  globalExpType,     // <--- הכנה לשלב הבא
-  setGlobalExpType,  // <--- הכנה לשלב הבא
-  globalExpOrg,      // <--- הכנה לשלב הבא
-  setGlobalExpOrg    // <--- הכנה לשלב הבא
+  globalProject,     
+  setGlobalProject,  
+  globalTask,        
+  setGlobalTask,     
+  globalExpType,     
+  setGlobalExpType,  
+  globalExpOrg,      
+  setGlobalExpOrg,
+  showToast // <--- קבלת הפונקציה מה-Navbar
 }) {
   // סטייט לשמירת הערכים (Grid 1)
   const [defaultOrg, setDefaultOrg] = useState('');
@@ -136,7 +137,13 @@ export default function DefaultsModal({
     if (setGlobalExpType) setGlobalExpType(defaultExpType);
     if (setGlobalExpOrg) setGlobalExpOrg(defaultExpOrg);
     
-    alert(`הגדרות נשמרו בהצלחה!`);
+    // הפעלת ה-Toast במקום ה-alert הישן
+    if (showToast) {
+      showToast('הגדרות המשתמש נשמרו בהצלחה!');
+    } else {
+      alert('הגדרות נשמרו בהצלחה!'); // Fallback למקרה שאין Toast
+    }
+    
     onClose();
   };
 

@@ -25,15 +25,16 @@ export default function Navbar({
   setGlobalDestType,   
   globalSubInv,        
   setGlobalSubInv,
-  globalProject,     // <--- קבלת פרויקט
-  setGlobalProject,  // <--- עדכון פרויקט
-  globalTask,        // <--- קבלת משימה
-  setGlobalTask,     // <--- עדכון משימה
-  globalExpType,     // <--- קבלת סוג הוצאה
-  setGlobalExpType,  // <--- עדכון סוג הוצאה
-  globalExpOrg,      // <--- קבלת יחידה מממנת
-  setGlobalExpOrg,   // <--- עדכון יחידה מממנת
-  onOpenNonCatalog 
+  globalProject,     
+  setGlobalProject,  
+  globalTask,        
+  setGlobalTask,     
+  globalExpType,     
+  setGlobalExpType,  
+  globalExpOrg,      
+  setGlobalExpOrg,   
+  onOpenNonCatalog,
+  showToast // <--- קבלת פונקציית ה-Toast מ-App.jsx
 }) {
   const [isDefaultsModalOpen, setIsDefaultsModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -160,14 +161,15 @@ export default function Navbar({
         setGlobalDestType={setGlobalDestType}    
         globalSubInv={globalSubInv}           
         setGlobalSubInv={setGlobalSubInv}
-        globalProject={globalProject}          // <--- העברה למודל
-        setGlobalProject={setGlobalProject}    // <--- העברה למודל
-        globalTask={globalTask}                // <--- העברה למודל
-        setGlobalTask={setGlobalTask}          // <--- העברה למודל
-        globalExpType={globalExpType}          // <--- העברה למודל
-        setGlobalExpType={setGlobalExpType}    // <--- העברה למודל
-        globalExpOrg={globalExpOrg}            // <--- העברה למודל
-        setGlobalExpOrg={setGlobalExpOrg}      // <--- העברה למודל
+        globalProject={globalProject}          
+        setGlobalProject={setGlobalProject}    
+        globalTask={globalTask}                
+        setGlobalTask={setGlobalTask}          
+        globalExpType={globalExpType}          
+        setGlobalExpType={setGlobalExpType}    
+        globalExpOrg={globalExpOrg}            
+        setGlobalExpOrg={setGlobalExpOrg}
+        showToast={showToast} /* <--- העברת פונקציית ה-Toast אל המודל */
       />
     </>
   );

@@ -451,6 +451,7 @@ function App() {
         globalExpOrg={globalExpOrg} setGlobalExpOrg={handleSetGlobalExpOrg}
         
         onOpenNonCatalog={() => setIsNonCatalogOpen(true)}
+        showToast={showToast}
       />
       
       <main className="p-6 max-w-7xl mx-auto pb-24">
@@ -614,7 +615,6 @@ function App() {
         <span className="font-bold text-sm">{toast.message}</span>
       </div>
 
-      {/* המודל החדש שמופעל מפה */}
       <WelcomeModal
         isOpen={showOrgPrompt}
         onSelectOrg={(org) => {
