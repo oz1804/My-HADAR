@@ -13,6 +13,7 @@ import ItemDetails from './components/ItemDetails';
 import SearchResults from './components/SearchResults';
 import Checkout from './components/Checkout/Checkout';
 import NonCatalogModal from './components/NonCatalogModal';
+import WelcomeModal from './components/WelcomeModal'; 
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -20,9 +21,22 @@ function App() {
   const [currentView, setCurrentView] = useState('home'); 
   const [viewPayload, setViewPayload] = useState(null);
   
-  const [globalOrg, setGlobalOrg] = useState(1); 
+  // --- סטייטים גלובליים להעדפות משתמש (מתחילים ריקים בכוונה) ---
+  const [globalOrg, setGlobalOrg] = useState(''); 
+  const [globalDestType, setGlobalDestType] = useState('Expense');
+  const [globalSubInv, setGlobalSubInv] = useState(''); 
+  
+  const [globalProject, setGlobalProject] = useState('');
+  const [globalTask, setGlobalTask] = useState('');
+  const [globalExpType, setGlobalExpType] = useState('');
+  const [globalExpOrg, setGlobalExpOrg] = useState('');
+  // -------------------------------------
+
   const [cartLines, setCartLines] = useState([]);
   const [isNonCatalogOpen, setIsNonCatalogOpen] = useState(false);
+  
+  // חלונית ברוך הבא / בחירת ארגון
+  const [showOrgPrompt, setShowOrgPrompt] = useState(false);
   
   // --- מערכת Toast גלובלית ואלגנטית ---
   const [toast, setToast] = useState({ show: false, message: '' });
@@ -40,6 +54,7 @@ function App() {
     return stored ? JSON.parse(stored) : (data.requisitions || []);
   });
 
+  // טעינת עגלת הקניות השמורה בעת התחברות
   useEffect(() => {
     if (currentUser) {
       const storedCarts = JSON.parse(localStorage.getItem('appCarts')) || {};
@@ -55,6 +70,118 @@ function App() {
     }
   }, [currentUser]);
 
+  // --- מערכת העדפות משתמש (User Preferences) ---
+  
+  // 1. טעינת העדפות ברירת המחדל בעת התחברות
+  useEffect(() => {
+    if (currentUser) {
+      const storedPrefs = JSON.parse(localStorage.getItem('appPreferences')) || {};
+      const userPrefs = storedPrefs[currentUser.id] || {};
+      
+      const userFromData = data.users.find(u => String(u.id) === String(currentUser.id));
+      const initialPrefs = userFromData?.preferences; 
+
+      const isOldSave = !userPrefs.hasOwnProperty('defaultProject');
+      const hasNoLocalPrefs = Object.keys(userPrefs).length === 0;
+
+      let activeOrg = '';
+      let activeDest = 'Expense';
+      let activeSubInv = '';
+      let activeProject = '';
+      let activeTask = '';
+      let activeExpType = '';
+      let activeExpOrg = '';
+
+      if (hasNoLocalPrefs || isOldSave) {
+        if (initialPrefs) {
+          activeOrg = initialPrefs.defaultOrg || '';
+          activeDest = initialPrefs.defaultDest || 'Expense';
+          activeSubInv = initialPrefs.defaultSubInv || '';
+          activeProject = initialPrefs.defaultProject || '';
+          activeTask = initialPrefs.defaultTask || '';
+          activeExpType = initialPrefs.defaultExpType || '';
+          activeExpOrg = initialPrefs.defaultExpOrg || '';
+        }
+      } else {
+        activeOrg = userPrefs.defaultOrg || '';
+        activeDest = userPrefs.defaultDest || 'Expense';
+        activeSubInv = userPrefs.defaultSubInv || '';
+        activeProject = userPrefs.defaultProject || '';
+        activeTask = userPrefs.defaultTask || '';
+        activeExpType = userPrefs.defaultExpType || '';
+        activeExpOrg = userPrefs.defaultExpOrg || '';
+      }
+
+      setGlobalOrg(activeOrg);
+      setGlobalDestType(activeDest);
+      setGlobalSubInv(activeSubInv);
+      setGlobalProject(activeProject);
+      setGlobalTask(activeTask);
+      setGlobalExpType(activeExpType);
+      setGlobalExpOrg(activeExpOrg);
+
+      // הקפצת חלונית בחירת ארגון למשתמשים ללא העדפות (דיליי קטן לאנימציה חלקה)
+      if (activeOrg === '') {
+        setTimeout(() => setShowOrgPrompt(true), 300);
+      } else {
+        setShowOrgPrompt(false);
+      }
+
+      storedPrefs[currentUser.id] = {
+        defaultOrg: activeOrg,
+        defaultDest: activeDest,
+        defaultSubInv: activeSubInv,
+        defaultProject: activeProject,
+        defaultTask: activeTask,
+        defaultExpType: activeExpType,
+        defaultExpOrg: activeExpOrg
+      };
+      localStorage.setItem('appPreferences', JSON.stringify(storedPrefs));
+    }
+  }, [currentUser]);
+
+  // 2. פונקציות שמירה אקטיבית
+  const handleSetGlobalOrg = (newVal) => {
+    setGlobalOrg(newVal);
+    updateUserPref('defaultOrg', newVal);
+  };
+  const handleSetGlobalDestType = (newVal) => {
+    setGlobalDestType(newVal);
+    updateUserPref('defaultDest', newVal);
+  };
+  const handleSetGlobalSubInv = (newVal) => {
+    setGlobalSubInv(newVal);
+    updateUserPref('defaultSubInv', newVal);
+  };
+  const handleSetGlobalProject = (newVal) => {
+    setGlobalProject(newVal);
+    updateUserPref('defaultProject', newVal);
+  };
+  const handleSetGlobalTask = (newVal) => {
+    setGlobalTask(newVal);
+    updateUserPref('defaultTask', newVal);
+  };
+  const handleSetGlobalExpType = (newVal) => {
+    setGlobalExpType(newVal);
+    updateUserPref('defaultExpType', newVal);
+  };
+  const handleSetGlobalExpOrg = (newVal) => {
+    setGlobalExpOrg(newVal);
+    updateUserPref('defaultExpOrg', newVal);
+  };
+
+  const updateUserPref = (key, value) => {
+    if (currentUser) {
+      const storedPrefs = JSON.parse(localStorage.getItem('appPreferences')) || {};
+      storedPrefs[currentUser.id] = {
+        ...storedPrefs[currentUser.id],
+        [key]: value
+      };
+      localStorage.setItem('appPreferences', JSON.stringify(storedPrefs));
+    }
+  };
+  // -----------------------------------------------------------
+
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
   }, [isDarkMode]);
@@ -64,6 +191,16 @@ function App() {
     setCurrentView('home'); 
     setViewPayload(null);
     setCartLines([]); 
+    setShowOrgPrompt(false);
+    
+    // איפוס מוחלט בעת התנתקות
+    setGlobalOrg(''); 
+    setGlobalDestType('Expense'); 
+    setGlobalSubInv(''); 
+    setGlobalProject('');
+    setGlobalTask('');
+    setGlobalExpType('');
+    setGlobalExpOrg('');
   };
 
   const handleNavigate = (view, payload = null) => {
@@ -102,6 +239,7 @@ function App() {
     });
   };
 
+  // הוספת פריט קטלוגי לסל
   const addNewLine = (itemId, initialQty = 1, customDate = null) => {
     const catalogItem = data.catalogItems.find(i => String(i.id) === String(itemId));
     
@@ -114,7 +252,7 @@ function App() {
       id: Date.now(),
       lineNumber: cartLines.length + 1,
       lineType: "טובין",
-      destinationType: "Inventory", 
+      destinationType: globalDestType,
       itemId: catalogItem.id,
       sku: catalogItem.sku,
       itemDescription: catalogItem.description,
@@ -122,7 +260,8 @@ function App() {
       uom: catalogItem.uom || "EA",
       unitPrice: price,
       needByDate: customDate || defaultDate, 
-      inventoryOrg: globalOrg, 
+      inventoryOrg: globalDestType === 'Expense' ? null : (globalOrg || ""), 
+      subInventory: globalDestType === 'Expense' ? "" : globalSubInv, 
       buyer: "",
       serviceApprover: "",
       qualityRequirement: "לא נדרשת ביקורת",
@@ -137,16 +276,16 @@ function App() {
           exchangeDate: '', 
           rate: 1, 
           functionalAmount: price * initialQty, 
-          projectId: '', 
-          taskId: '', 
-          expenditureTypeId: '', 
-          expenditureOrgId: '' 
+          projectId: globalProject, 
+          taskId: globalTask, 
+          expenditureTypeId: globalDestType === 'Inventory' ? '' : globalExpType, 
+          expenditureOrgId: globalDestType === 'Inventory' ? '' : globalExpOrg 
         }
       ]
     };
     
     updateCartAndSave(prev => [...prev, newLine]);
-    showToast('הפריט נוסף לסל בהצלחה!'); // <-- הודעת ה-Toast במקום alert
+    showToast('הפריט נוסף לסל בהצלחה!');
   };
 
   const addNonCatalogLine = (lineData) => {
@@ -171,7 +310,8 @@ function App() {
       exchangeDate: lineData.exchangeDate,
       rate: rate,
       needByDate: defaultDate, 
-      inventoryOrg: lineData.lineType === 'שירות' ? null : globalOrg, 
+      inventoryOrg: lineData.inventoryOrg || (lineData.lineType === 'שירות' ? null : (globalOrg || "")), 
+      subInventory: lineData.subInventory || "", 
       buyer: lineData.buyer || "",
       requester: lineData.requester || currentUser.id,
       serviceApprover: lineData.serviceApprover || "",
@@ -187,16 +327,16 @@ function App() {
           exchangeDate: lineData.exchangeDate, 
           rate: rate, 
           functionalAmount: lineData.unitPrice * lineData.quantity * rate,
-          projectId: '', 
-          taskId: '', 
-          expenditureTypeId: '', 
-          expenditureOrgId: '' 
+          projectId: globalProject, 
+          taskId: globalTask, 
+          expenditureTypeId: lineData.destinationType === 'Inventory' ? '' : globalExpType, 
+          expenditureOrgId: lineData.destinationType === 'Inventory' ? '' : globalExpOrg 
         }
       ]
     };
     
     updateCartAndSave(prev => [...prev, newLine]);
-    showToast('פריט חופשי נוסף לסל בהצלחה!'); // <-- הודעת ה-Toast במקום alert
+    showToast('פריט חופשי נוסף לסל בהצלחה!');
   };
 
   const handleCheckoutSubmit = (headerData, finalLines, emptyCart, routingSteps = [], status = 'Draft') => {
@@ -223,6 +363,7 @@ function App() {
           rate: Number(line.rate),
           needByDate: line.needByDate,
           inventoryOrg: line.inventoryOrg ? Number(line.inventoryOrg) : null,
+          subInventory: line.subInventory || "", 
           buyer: line.buyer, 
           requester: line.requester ? Number(line.requester) : null,
           serviceApprover: line.serviceApprover ? Number(line.serviceApprover) : null,
@@ -300,8 +441,15 @@ function App() {
         onNavigate={handleNavigate}
         cartLines={cartLines} 
         onUpdateQty={updateLineQty}
-        globalOrg={globalOrg}
-        setGlobalOrg={setGlobalOrg}
+        
+        globalOrg={globalOrg} setGlobalOrg={handleSetGlobalOrg} 
+        globalDestType={globalDestType} setGlobalDestType={handleSetGlobalDestType} 
+        globalSubInv={globalSubInv} setGlobalSubInv={handleSetGlobalSubInv} 
+        globalProject={globalProject} setGlobalProject={handleSetGlobalProject}
+        globalTask={globalTask} setGlobalTask={handleSetGlobalTask}
+        globalExpType={globalExpType} setGlobalExpType={handleSetGlobalExpType}
+        globalExpOrg={globalExpOrg} setGlobalExpOrg={handleSetGlobalExpOrg}
+        
         onOpenNonCatalog={() => setIsNonCatalogOpen(true)}
       />
       
@@ -382,7 +530,15 @@ function App() {
           <Checkout 
             cartLines={cartLines}
             currentUser={currentUser}
+            
             globalOrg={globalOrg}
+            globalDestType={globalDestType} 
+            globalSubInv={globalSubInv} 
+            globalProject={globalProject}
+            globalTask={globalTask}
+            globalExpType={globalExpType}
+            globalExpOrg={globalExpOrg}
+            
             onBack={() => handleNavigate('home')}
             onSubmit={handleCheckoutSubmit}
             onRemoveFromCart={(id) => updateLineQty(id, 0)} 
@@ -404,6 +560,7 @@ function App() {
                 rate: newLineData.rate || 1,
                 needByDate: newLineData.needByDate,
                 inventoryOrg: newLineData.inventoryOrg,
+                subInventory: newLineData.subInventory || "", 
                 buyer: newLineData.buyer,
                 requester: newLineData.requester,
                 serviceApprover: newLineData.serviceApprover,
@@ -428,6 +585,14 @@ function App() {
         isOpen={isNonCatalogOpen}
         onClose={() => setIsNonCatalogOpen(false)}
         currentUser={currentUser}
+        
+        globalDestType={globalDestType} 
+        globalSubInv={globalSubInv}
+        globalProject={globalProject}
+        globalTask={globalTask}
+        globalExpType={globalExpType}
+        globalExpOrg={globalExpOrg}
+        
         onAddToCart={(data) => {
           addNonCatalogLine(data);
         }}
@@ -448,6 +613,19 @@ function App() {
         </div>
         <span className="font-bold text-sm">{toast.message}</span>
       </div>
+
+      {/* המודל החדש שמופעל מפה */}
+      <WelcomeModal
+        isOpen={showOrgPrompt}
+        onSelectOrg={(org) => {
+          handleSetGlobalOrg(org.id);
+          setShowOrgPrompt(false);
+          showToast(`ארגון ${org.name} הוגדר כברירת מחדל בהצלחה!`);
+        }}
+        organizations={data.inventoryOrganizations || []}
+        userOrgs={currentUser?.organizations || []}
+        currentUser={currentUser} 
+      />
 
     </div>
   );

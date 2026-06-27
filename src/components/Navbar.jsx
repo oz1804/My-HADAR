@@ -21,7 +21,19 @@ export default function Navbar({
   onUpdateQty,    
   globalOrg,      
   setGlobalOrg,
-  onOpenNonCatalog // <--- הפרופ החדש מ-App.jsx שפותח את המודל הגלובלי
+  globalDestType,      
+  setGlobalDestType,   
+  globalSubInv,        
+  setGlobalSubInv,
+  globalProject,     // <--- קבלת פרויקט
+  setGlobalProject,  // <--- עדכון פרויקט
+  globalTask,        // <--- קבלת משימה
+  setGlobalTask,     // <--- עדכון משימה
+  globalExpType,     // <--- קבלת סוג הוצאה
+  setGlobalExpType,  // <--- עדכון סוג הוצאה
+  globalExpOrg,      // <--- קבלת יחידה מממנת
+  setGlobalExpOrg,   // <--- עדכון יחידה מממנת
+  onOpenNonCatalog 
 }) {
   const [isDefaultsModalOpen, setIsDefaultsModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -45,13 +57,11 @@ export default function Navbar({
             <div className="hidden md:block w-px h-8 bg-gray-200 dark:bg-gray-700 shrink-0"></div>
 
             <div className="shrink-0">
-              <NavOrg />
+              <NavOrg globalOrg={globalOrg} setGlobalOrg={setGlobalOrg} />
             </div>
 
             <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
               <NavSearch onNavigate={handleNavigate} />
-              
-              {/* חיבור הלחצן לפונקציה הגלובלית במקום לסטייט המקומי */}
               <NavNonCatalogBtn onOpenModal={onOpenNonCatalog} />
 
               <div className="hidden 2xl:flex items-center gap-4 shrink-0 ms-2">
@@ -141,8 +151,24 @@ export default function Navbar({
         </div>
       </header>
 
-      {/* שמנו פה רק את המודל של ברירות המחדל. ה-NonCatalogModal מנוהל ב-App.jsx */}
-      <DefaultsModal isOpen={isDefaultsModalOpen} onClose={() => setIsDefaultsModalOpen(false)} />
+      <DefaultsModal 
+        isOpen={isDefaultsModalOpen} 
+        onClose={() => setIsDefaultsModalOpen(false)} 
+        globalOrg={globalOrg}
+        setGlobalOrg={setGlobalOrg}
+        globalDestType={globalDestType}          
+        setGlobalDestType={setGlobalDestType}    
+        globalSubInv={globalSubInv}           
+        setGlobalSubInv={setGlobalSubInv}
+        globalProject={globalProject}          // <--- העברה למודל
+        setGlobalProject={setGlobalProject}    // <--- העברה למודל
+        globalTask={globalTask}                // <--- העברה למודל
+        setGlobalTask={setGlobalTask}          // <--- העברה למודל
+        globalExpType={globalExpType}          // <--- העברה למודל
+        setGlobalExpType={setGlobalExpType}    // <--- העברה למודל
+        globalExpOrg={globalExpOrg}            // <--- העברה למודל
+        setGlobalExpOrg={setGlobalExpOrg}      // <--- העברה למודל
+      />
     </>
   );
 }

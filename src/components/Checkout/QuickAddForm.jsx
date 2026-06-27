@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import data from '../../data/data.json';
 
 export default function QuickAddForm({
@@ -16,7 +16,13 @@ export default function QuickAddForm({
   headerOrg,
   headerBuyer = '',
   headerRequester = '',
-  headerServiceApprover = ''
+  headerServiceApprover = '',
+  globalDestType,
+  globalSubInv, 
+  globalProject,   // <--- קבלת הפרויקט הגלובלי
+  globalTask,      // <--- קבלת המשימה הגלובלית
+  globalExpType,   // <--- קבלת סוג ההוצאה הגלובלי
+  globalExpOrg     // <--- קבלת היחידה המממנת הגלובלית
 }) {
   const getDefaultNeedByDate = () => {
     const d = new Date();
@@ -33,7 +39,11 @@ export default function QuickAddForm({
   const [quickNeedBy, setQuickNeedBy] = useState(getDefaultNeedByDate());
   
   const [quickLineType, setQuickLineType] = useState('טובין');
-  const [quickDest, setQuickDest] = useState('Inventory');
+  
+  // שימוש בברירת המחדל הגלובלית לאתחול יעד הדרישה
+  const initialDest = globalDestType || 'Expense';
+  const [quickDest, setQuickDest] = useState(initialDest);
+  
   const [quickCurrency, setQuickCurrency] = useState('ILS');
   const [quickExchangeDate, setQuickExchangeDate] = useState('');
   const [quickRate, setQuickRate] = useState(1);
@@ -48,19 +58,23 @@ export default function QuickAddForm({
   const [quickJustification, setQuickJustification] = useState(justification);
 
   const [quickOrg, setQuickOrg] = useState(headerOrg !== 'mixed' ? headerOrg : '');
+  
+  // אתחול מחסן מברירת המחדל הגלובלית רק אם היעד הוא מלאי
+  const [quickSubInv, setQuickSubInv] = useState((initialDest === 'Inventory' && globalSubInv) ? globalSubInv : ''); 
 
   // הודעות שגיאה וסימון שדות אלגנטי
   const [errorMessage, setErrorMessage] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
 
+  // --- אתחול חלוקה תקציבית עם ערכי הכותרת או הערכים הגלובליים ---
   const [quickDists, setQuickDists] = useState([{
     id: Date.now(),
     percentage: 100,
     quantity: 1,
-    projectId: headerProjectId,
-    taskId: headerTaskId,
-    expenditureTypeId: headerExpTypeId,
-    expenditureOrgId: headerExpOrgId
+    projectId: headerProjectId || globalProject || '',
+    taskId: headerTaskId || globalTask || '',
+    expenditureTypeId: initialDest === 'Inventory' ? '' : (headerExpTypeId || globalExpType || ''),
+    expenditureOrgId: initialDest === 'Inventory' ? '' : (headerExpOrgId || globalExpOrg || '')
   }]);
 
   const [filteredItems, setFilteredItems] = useState([]);
@@ -74,24 +88,43 @@ export default function QuickAddForm({
   useEffect(() => { setQuickRequester(headerRequester !== 'mixed' ? headerRequester : ''); }, [headerRequester]);
   useEffect(() => { setQuickApprover(headerServiceApprover !== 'mixed' && headerServiceApprover ? headerServiceApprover : (currentUser?.id || '')); }, [headerServiceApprover, currentUser]);
 
-  // --- התיקון: לוגיקה אוטומטית לנעילת יעד דרישה כשנבחר "שירות" ---
+  // לוגיקה אוטומטית לנעילת יעד דרישה כשנבחר "שירות"
   useEffect(() => {
     if (quickLineType === 'שירות') {
       setQuickDest('Expense');
+      setQuickSubInv(''); 
+      // שחזור ערכי הוצאה אם יש במעבר לשירות
+      setQuickDists(prev => prev.map(d => ({
+        ...d,
+        expenditureTypeId: d.expenditureTypeId || headerExpTypeId || globalExpType || '',
+        expenditureOrgId: d.expenditureOrgId || headerExpOrgId || globalExpOrg || ''
+      })));
     }
-  }, [quickLineType]);
+  }, [quickLineType, headerExpTypeId, globalExpType, headerExpOrgId, globalExpOrg]);
 
+  // מניעת איפוס מחסן בטעינה הראשונית כדי לשמר את העדפת המשתמש
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    // איפוס מחסן רק אם המשתמש משנה ארגון מלאי אקטיבית
+    setQuickSubInv('');
+  }, [quickOrg]);
+
+  // סנכרון מול שינויי תקציב בכותרת הקופה (אם לא מעורב)
   useEffect(() => {
     if (!isBudgetMixed && quickDists.length === 1) {
       setQuickDists(prev => [{
         ...prev[0],
-        projectId: headerProjectId,
-        taskId: headerTaskId,
-        expenditureTypeId: headerExpTypeId,
-        expenditureOrgId: headerExpOrgId
+        projectId: headerProjectId || globalProject || '',
+        taskId: headerTaskId || globalTask || '',
+        expenditureTypeId: quickDest === 'Inventory' ? '' : (headerExpTypeId || globalExpType || ''),
+        expenditureOrgId: quickDest === 'Inventory' ? '' : (headerExpOrgId || globalExpOrg || '')
       }]);
     }
-  }, [headerProjectId, headerTaskId, headerExpTypeId, headerExpOrgId, isBudgetMixed]);
+  }, [headerProjectId, headerTaskId, headerExpTypeId, headerExpOrgId, isBudgetMixed, globalProject, globalTask, globalExpType, globalExpOrg, quickDest]);
 
   // לוגיקה חכמה לניהול שערי חליפין
   useEffect(() => {
@@ -200,14 +233,15 @@ export default function QuickAddForm({
       if (quickUom === 'EA') remainingQty = Math.floor(remainingQty);
       
       const last = prev[prev.length - 1];
+      
       return [...prev, {
         id: Date.now() + Math.random(),
         percentage: remainingPct,
         quantity: remainingQty,
-        projectId: last?.projectId || '',
-        taskId: last?.taskId || '',
-        expenditureTypeId: last?.expenditureTypeId || '',
-        expenditureOrgId: last?.expenditureOrgId || ''
+        projectId: last?.projectId || headerProjectId || globalProject || '',
+        taskId: last?.taskId || headerTaskId || globalTask || '',
+        expenditureTypeId: quickDest === 'Inventory' ? '' : (last?.expenditureTypeId || headerExpTypeId || globalExpType || ''),
+        expenditureOrgId: quickDest === 'Inventory' ? '' : (last?.expenditureOrgId || headerExpOrgId || globalExpOrg || '')
       }];
     });
   };
@@ -216,7 +250,10 @@ export default function QuickAddForm({
     let missing = [];
     if (!quickItem && !quickDesc.trim()) missing.push('quickDesc');
     if (Number(quickQty) <= 0) missing.push('quickQty');
-    if (!quickOrg && quickDest === 'Inventory') missing.push('quickOrg');
+    
+    // ארגון מלאי חובה
+    if (!quickOrg) missing.push('quickOrg');
+    
     if (quickLineType === 'שירות' && !String(quickApprover).trim()) missing.push('quickApprover');
 
     const totalPct = quickDists.reduce((sum, d) => sum + (Number(d.percentage) || 0), 0);
@@ -249,7 +286,6 @@ export default function QuickAddForm({
 
     onAddNewLine({
       itemId: quickItem?.id || null,
-      // --- התיקון: החזרת מחרוזת אחידה אם אין מק"ט ---
       sku: quickItem ? quickItem.sku : 'פריט חופשי',
       itemDescription: quickDesc,
       quantity: Number(quickQty),
@@ -259,6 +295,7 @@ export default function QuickAddForm({
       lineType: quickLineType,
       destinationType: quickDest,
       inventoryOrg: quickOrg,
+      subInventory: quickDest === 'Inventory' ? quickSubInv : null, 
       currency: quickCurrency,
       exchangeDate: quickExchangeDate,
       rate: Number(quickRate),
@@ -277,6 +314,7 @@ export default function QuickAddForm({
     setQuickDesc('');
     setQuickPrice('');
     setQuickLineType('טובין');
+    setQuickSubInv('');
     if (hasLines && onClose) onClose();
   };
 
@@ -400,7 +438,22 @@ export default function QuickAddForm({
           <label className={quickLabelClass}>יעד דרישה</label>
           <select 
             value={quickDest} 
-            onChange={(e) => setQuickDest(e.target.value)} 
+            onChange={(e) => {
+                const val = e.target.value;
+                setQuickDest(val);
+                if (val === 'Expense') {
+                  setQuickSubInv('');
+                  // שחזור ערכי הוצאה אם מוגדרים גלובלית/בכותרת
+                  setQuickDists(prev => prev.map(d => ({
+                    ...d,
+                    expenditureTypeId: d.expenditureTypeId || headerExpTypeId || globalExpType || '',
+                    expenditureOrgId: d.expenditureOrgId || headerExpOrgId || globalExpOrg || ''
+                  })));
+                } else if (val === 'Inventory') {
+                  // איפוס הערכים אם עוברים למלאי
+                  setQuickDists(prev => prev.map(d => ({ ...d, expenditureTypeId: '', expenditureOrgId: '' })));
+                }
+            }} 
             disabled={quickLineType === 'שירות'} 
             className={`${quickInputClass} ${quickLineType === 'שירות' ? 'cursor-not-allowed opacity-70' : ''}`}
           >
@@ -409,13 +462,34 @@ export default function QuickAddForm({
           </select>
         </div>
 
+        {/* שדה ארגון מלאי הפך לחובה תמיד, מבוטל ממנו ה-disabled */}
         <div className="md:col-span-2">
-          <label className={`${quickLabelClass} ${invalidFields.includes('quickOrg') ? 'text-red-500' : ''}`}>ארגון מלאי {quickDest === 'Inventory' && <span className="text-red-500">*</span>}</label>
-          <select value={quickOrg} onChange={(e) => { setQuickOrg(e.target.value); clearError('quickOrg'); }} disabled={quickDest === 'Expense'} className={`${quickInputClass} ${invalidFields.includes('quickOrg') ? errorInputClass : ''} ${quickDest === 'Expense' ? 'opacity-50 cursor-not-allowed' : ''}`}>
+          <label className={`${quickLabelClass} ${invalidFields.includes('quickOrg') ? 'text-red-500' : ''}`}>ארגון מלאי <span className="text-red-500">*</span></label>
+          <select value={quickOrg} onChange={(e) => { setQuickOrg(e.target.value); clearError('quickOrg'); }} className={`${quickInputClass} ${invalidFields.includes('quickOrg') ? errorInputClass : ''}`}>
             <option value="">בחר ארגון...</option>
             {data.inventoryOrganizations?.map(org => <option key={org.id} value={org.id}>{org.code} - {org.name}</option>)}
           </select>
         </div>
+
+        {/* שדה מחסן מוצג *אך ורק* אם יעד הדרישה הוא מלאי */}
+        {quickDest === 'Inventory' && (
+          <div className="md:col-span-2 animate-fade-in">
+            <label className={`${quickLabelClass} ${invalidFields.includes('quickSubInv') ? 'text-red-500' : ''}`}>
+              מחסן (Sub-Inv)
+            </label>
+            <select 
+              value={quickSubInv} 
+              onChange={(e) => { setQuickSubInv(e.target.value); clearError('quickSubInv'); }} 
+              disabled={!quickOrg} 
+              className={`${quickInputClass} ${invalidFields.includes('quickSubInv') ? errorInputClass : ''} ${!quickOrg ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <option value="">בחר מחסן...</option>
+              {data.subInventories?.filter(s => String(s.inventoryOrgId) === String(quickOrg)).map(sub => (
+                <option key={sub.id} value={sub.code}>{sub.name} ({sub.code})</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* -- תצוגת הכספים המאוחדת -- */}
         <div className="md:col-span-1">
@@ -442,6 +516,7 @@ export default function QuickAddForm({
             {data.suppliers?.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
+
         <div className="md:col-span-2">
           <label className={quickLabelClass}>דרישת איכות</label>
           <select value={quickQuality} onChange={(e) => setQuickQuality(e.target.value)} className={quickInputClass}>

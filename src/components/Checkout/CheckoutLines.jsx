@@ -29,7 +29,13 @@ export default function CheckoutLines({
   isBudgetMixed = false,
   headerOrg = '',
   headerBuyer = '',
-  headerRequester = ''
+  headerRequester = '',
+  globalDestType, 
+  globalSubInv,
+  globalProject,   // <--- קבלת הפרויקט מ-Checkout
+  globalTask,      // <--- קבלת המשימה מ-Checkout
+  globalExpType,   // <--- קבלת סוג ההוצאה מ-Checkout
+  globalExpOrg     // <--- קבלת היחידה המממנת מ-Checkout
 }) {
   const [openDocsLineId, setOpenDocsLineId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -114,6 +120,12 @@ export default function CheckoutLines({
               headerOrg={headerOrg}
               headerBuyer={headerBuyer} 
               headerRequester={headerRequester} 
+              globalDestType={globalDestType} 
+              globalSubInv={globalSubInv} 
+              globalProject={globalProject}   // <--- העברה לטופס
+              globalTask={globalTask}         // <--- העברה לטופס
+              globalExpType={globalExpType}   // <--- העברה לטופס
+              globalExpOrg={globalExpOrg}     // <--- העברה לטופס
             />
           </div>
         )}
@@ -264,6 +276,12 @@ export default function CheckoutLines({
               headerOrg={headerOrg}
               headerBuyer={headerBuyer} 
               headerRequester={headerRequester} 
+              globalDestType={globalDestType} 
+              globalSubInv={globalSubInv} 
+              globalProject={globalProject}   // <--- העברה לטופס
+              globalTask={globalTask}         // <--- העברה לטופס
+              globalExpType={globalExpType}   // <--- העברה לטופס
+              globalExpOrg={globalExpOrg}     // <--- העברה לטופס
             />
           </div>
         )}

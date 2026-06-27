@@ -4,7 +4,22 @@ import CheckoutLines from './CheckoutLines';
 import useCheckout from './UseCheckout'; 
 import ApprovalRoutingDrawer from './ApprovalRoutingDrawer';
 
-export default function Checkout({ cartLines = [], currentUser, globalOrg, onBack, onSubmit, onRemoveFromCart, nextRequisitionNumber, onAddLineToCart }) {
+export default function Checkout({ 
+  cartLines = [], 
+  currentUser, 
+  globalOrg, 
+  globalDestType, 
+  globalSubInv, 
+  globalProject,   // <--- קבלת פרויקט גלובלי מ-App.jsx
+  globalTask,      // <--- קבלת משימה גלובלית מ-App.jsx
+  globalExpType,   // <--- קבלת סוג הוצאה גלובלי מ-App.jsx
+  globalExpOrg,    // <--- קבלת יחידה מממנת גלובלית מ-App.jsx
+  onBack, 
+  onSubmit, 
+  onRemoveFromCart, 
+  nextRequisitionNumber, 
+  onAddLineToCart 
+}) {
   
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isApprovalDrawerOpen, setIsApprovalDrawerOpen] = useState(false); 
@@ -42,7 +57,16 @@ export default function Checkout({ cartLines = [], currentUser, globalOrg, onBac
     handleAddDist,
     handleDistFieldChange,
     handleRemoveDist
-  } = useCheckout({ cartLines, globalOrg, onRemoveFromCart, currentUser });
+  } = useCheckout({ 
+    cartLines, 
+    globalOrg, 
+    onRemoveFromCart, 
+    currentUser,
+    globalProject, // <--- העברה פנימה לאתחול הכותרת
+    globalTask,    // <--- העברה פנימה לאתחול הכותרת
+    globalExpType, // <--- העברה פנימה לאתחול הכותרת
+    globalExpOrg   // <--- העברה פנימה לאתחול הכותרת
+  });
 
   const buildHeaderData = () => ({
     org: headerOrg,
@@ -139,6 +163,12 @@ export default function Checkout({ cartLines = [], currentUser, globalOrg, onBac
           headerServiceApprover={headerServiceApprover} 
           isBudgetMixed={isBudgetMixed}
           headerOrg={headerOrg}
+          globalDestType={globalDestType} 
+          globalSubInv={globalSubInv} 
+          globalProject={globalProject} // <--- העברה למטה ל-CheckoutLines
+          globalTask={globalTask}       // <--- העברה למטה ל-CheckoutLines
+          globalExpType={globalExpType} // <--- העברה למטה ל-CheckoutLines
+          globalExpOrg={globalExpOrg}   // <--- העברה למטה ל-CheckoutLines
         />
       </div>
 

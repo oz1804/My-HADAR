@@ -2,10 +2,28 @@ import React, { useState, useRef, useEffect } from 'react';
 import NavBarOrgList from './NavBarOrgList';
 import data from '../data/data.json';
 
-export default function NavOrg() {
+export default function NavOrg({ globalOrg, setGlobalOrg }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedOrg, setSelectedOrg] = useState(data.inventoryOrganizations[0]);
+  
+  // תמיכה ב-null אם המשתמש ללא הגדרות
+  const [selectedOrg, setSelectedOrg] = useState(() => {
+    if (!globalOrg) return null;
+    const orgs = data?.inventoryOrganizations || [];
+    return orgs.find(o => String(o.id) === String(globalOrg)) || null;
+  });
+  
   const dropdownRef = useRef(null);
+
+  // סנכרון התצוגה, איפוס במקרה שהארגון הגלובלי ריק
+  useEffect(() => {
+    if (globalOrg) {
+      const orgs = data?.inventoryOrganizations || [];
+      const org = orgs.find(o => String(o.id) === String(globalOrg));
+      setSelectedOrg(org || null);
+    } else {
+      setSelectedOrg(null);
+    }
+  }, [globalOrg]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -20,6 +38,9 @@ export default function NavOrg() {
   const handleSelect = (org) => {
     setSelectedOrg(org);
     setIsOpen(false);
+    if (setGlobalOrg) {
+      setGlobalOrg(org.id);
+    }
   };
 
   return (
@@ -35,7 +56,7 @@ export default function NavOrg() {
             ארגון
           </span>
           <span className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white mt-0.5">
-            {selectedOrg.code}
+            {selectedOrg ? selectedOrg.code : 'לא הוגדר'}
           </span>
         </div>
 
@@ -53,11 +74,13 @@ export default function NavOrg() {
             </span>
             <div className="flex items-center gap-1.5 leading-none">
               <span className="text-xs xl:text-sm font-bold text-gray-900 dark:text-white">
-                {selectedOrg.name}
+                {selectedOrg ? selectedOrg.name : 'לא הוגדר'}
               </span>
-              <span className="text-[10px] xl:text-xs px-1 xl:px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-600 font-mono text-gray-700 dark:text-gray-300">
-                {selectedOrg.code}
-              </span>
+              {selectedOrg && (
+                <span className="text-[10px] xl:text-xs px-1 xl:px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-600 font-mono text-gray-700 dark:text-gray-300">
+                  {selectedOrg.code}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -73,8 +96,8 @@ export default function NavOrg() {
 
       {isOpen && (
         <NavBarOrgList
-          organizations={data.inventoryOrganizations}
-          selectedOrgCode={selectedOrg.code}
+          organizations={data?.inventoryOrganizations || []}
+          selectedOrgCode={selectedOrg ? selectedOrg.code : ''}
           onSelect={handleSelect}
         />
       )}

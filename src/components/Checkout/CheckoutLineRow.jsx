@@ -197,7 +197,14 @@ export default function CheckoutLineRow({
                 <label className="text-[11px] font-semibold text-gray-500">יעד דרישה (Destination)</label>
                 <select 
                   value={line.destinationType || 'Inventory'}
-                  onChange={(e) => onLineFieldChange(line.id, 'destinationType', e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    onLineFieldChange(line.id, 'destinationType', val);
+                    // אם עוברים להוצאה, נאפס את המחסן כדי לא לשמור זבל
+                    if (val === 'Expense') {
+                      onLineFieldChange(line.id, 'subInventory', '');
+                    }
+                  }}
                   className="p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="Inventory">מלאי (Inventory)</option>
@@ -219,7 +226,11 @@ export default function CheckoutLineRow({
                 <label className="text-[11px] font-semibold text-gray-500">ארגון מלאי</label>
                 <select 
                   value={line.inventoryOrg || ''}
-                  onChange={(e) => onLineOrgChange(line.id, e.target.value)}
+                  onChange={(e) => {
+                    onLineOrgChange(line.id, e.target.value);
+                    // איפוס המחסן ברגע שמשנים את הארגון שלו
+                    onLineFieldChange(line.id, 'subInventory', '');
+                  }}
                   className="p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 >
                   {data.inventoryOrganizations?.map(org => (
@@ -227,6 +238,28 @@ export default function CheckoutLineRow({
                   ))}
                 </select>
               </div>
+
+              {/* --- התוספת החדשה: שדה מחסן (Sub-Inventory) --- */}
+              {(!line.destinationType || line.destinationType === 'Inventory') && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500">מחסן (Sub-Inv)</label>
+                  <select 
+                    value={line.subInventory || ''}
+                    onChange={(e) => onLineFieldChange(line.id, 'subInventory', e.target.value)}
+                    disabled={!line.inventoryOrg}
+                    className={`p-1.5 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-colors ${
+                      !line.inventoryOrg
+                        ? 'bg-gray-100 border-gray-200 text-gray-400 dark:bg-gray-800/50 dark:border-gray-700/50 cursor-not-allowed'
+                        : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700 focus:border-blue-500'
+                    }`}
+                  >
+                    <option value="">בחר מחסן...</option>
+                    {data.subInventories?.filter(s => String(s.inventoryOrgId) === String(line.inventoryOrg)).map(sub => (
+                      <option key={sub.id} value={sub.code}>{sub.name} ({sub.code})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex flex-col gap-1">
                 <label className="text-[11px] font-semibold text-gray-500">מטבע</label>
@@ -316,7 +349,7 @@ export default function CheckoutLineRow({
                 </select>
               </div>
 
-              {/* --- שדה מאשר שירות הוזז לכאן (אחרי מזמין), וערכו תוקן ל-ID --- */}
+              {/* --- שדה מאשר שירות --- */}
               <div className="flex flex-col gap-1 lg:col-span-1">
                 <label className="text-[11px] font-semibold text-gray-500">מאשר שירות</label>
                 <select 

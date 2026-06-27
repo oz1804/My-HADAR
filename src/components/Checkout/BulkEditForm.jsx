@@ -36,12 +36,13 @@ export default function BulkEditForm({
       destinationType: getCommon('destinationType'),
       needByDate: getCommon('needByDate'),
       inventoryOrg: getCommon('inventoryOrg'),
+      subInventory: getCommon('subInventory'),
       currency: getCommon('currency'),
       exchangeDate: getCommon('exchangeDate'),
       supplier: getCommon('supplier'),
       qualityRequirement: getCommon('qualityRequirement'),
       serviceApprover: getCommon('serviceApprover'),
-      requester: getCommon('requester'), // נוסף שדה מזמין
+      requester: getCommon('requester'), 
       buyer: getCommon('buyer'),
       buyerNotes: getCommon('buyerNotes'), 
       justification: getCommon('justification') 
@@ -135,26 +136,72 @@ export default function BulkEditForm({
       </h4>
       
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        
+        {/* יעד דרישה - כולל איפוס מחסן אם שונה להוצאה */}
         <div>
           <label className={bulkLabelClass}>יעד דרישה</label>
-          <select value={bulkFields.destinationType || '__MIXED__'} onChange={(e) => setBulkFields({...bulkFields, destinationType: e.target.value})} className={bulkSelectClass}>
+          <select 
+            value={bulkFields.destinationType || '__MIXED__'} 
+            onChange={(e) => {
+              const val = e.target.value;
+              setBulkFields(prev => ({
+                ...prev, 
+                destinationType: val,
+                ...(val === 'Expense' ? { subInventory: '' } : {})
+              }));
+            }} 
+            className={bulkSelectClass}
+          >
             <option value="__MIXED__" disabled hidden>-- ערכים שונים --</option>
             <option value="Inventory">מלאי (Inventory)</option>
             <option value="Expense">הוצאה (Expense)</option>
           </select>
         </div>
+
         <div>
           <label className={bulkLabelClass}>תאריך נדרש</label>
           <input type="date" value={bulkFields.needByDate === '__MIXED__' ? '' : (bulkFields.needByDate || '')} onChange={(e) => setBulkFields({...bulkFields, needByDate: e.target.value})} className={bulkSelectClass} />
         </div>
+
+        {/* ארגון מלאי - מוגדר כחובה תמיד */}
         <div>
-          <label className={bulkLabelClass}>ארגון מלאי</label>
-          <select value={bulkFields.inventoryOrg || '__MIXED__'} onChange={(e) => setBulkFields({...bulkFields, inventoryOrg: Number(e.target.value)})} className={bulkSelectClass}>
+          <label className={bulkLabelClass}>ארגון מלאי <span className="text-red-500">*</span></label>
+          <select 
+            value={bulkFields.inventoryOrg || '__MIXED__'} 
+            onChange={(e) => {
+              setBulkFields(prev => ({
+                ...prev, 
+                inventoryOrg: Number(e.target.value),
+                subInventory: '' // מאפס את המחסן כשמשנים ארגון
+              }));
+            }} 
+            className={bulkSelectClass}
+          >
             <option value="__MIXED__" disabled hidden>-- ערכים שונים --</option>
             <option value="">לא הוגדר</option>
             {data.inventoryOrganizations?.map(org => <option key={org.id} value={org.id}>{org.code} - {org.name}</option>)}
           </select>
         </div>
+
+        {/* שדה מחסן מוסתר לחלוטין אם נבחרה הוצאה */}
+        {bulkFields.destinationType !== 'Expense' && (
+          <div className="animate-fade-in">
+            <label className={bulkLabelClass}>מחסן (Sub-Inv)</label>
+            <select 
+              value={bulkFields.subInventory === '__MIXED__' ? '__MIXED__' : (bulkFields.subInventory || '')} 
+              onChange={(e) => setBulkFields({...bulkFields, subInventory: e.target.value})} 
+              disabled={bulkFields.inventoryOrg === '__MIXED__' || !bulkFields.inventoryOrg}
+              className={`${bulkSelectClass} ${bulkFields.inventoryOrg === '__MIXED__' || !bulkFields.inventoryOrg ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <option value="__MIXED__" disabled hidden>-- ערכים שונים --</option>
+              <option value="">לא הוגדר</option>
+              {data.subInventories?.filter(s => String(s.inventoryOrgId) === String(bulkFields.inventoryOrg)).map(sub => (
+                <option key={sub.id} value={sub.code}>{sub.name} ({sub.code})</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div>
           <label className={bulkLabelClass}>מטבע</label>
           <select value={bulkFields.currency || '__MIXED__'} onChange={(e) => setBulkFields({...bulkFields, currency: e.target.value})} className={bulkSelectClass}>
@@ -193,7 +240,6 @@ export default function BulkEditForm({
           </select>
         </div>
         
-        {/* --- שדה מזמין --- */}
         <div>
           <label className={bulkLabelClass}>מזמין</label>
           <select value={bulkFields.requester || '__MIXED__'} onChange={(e) => setBulkFields({...bulkFields, requester: e.target.value})} className={bulkSelectClass}>

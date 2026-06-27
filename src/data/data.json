@@ -1,199 +1,301 @@
 {
   "users": [
-  { 
-    "id": 1, 
-    "username": "oz", 
-    "firstName": "עוז", 
-    "gender": "male",
-    "supervisor": 3,
-    "job": "מיישם",
-    "organizations": [1, 2],
-    "cart": [
-      {
-        "id": 1,
-        "lineNumber": 1,
-        "lineType": "טובין",
-        "destinationType": "Inventory",
-        "itemId": 17,
-        "itemDescription": "כונן קשיח פנימי Samsung 990 PRO 2TB PCIe 4.0 NVMe M.2 SSD",
-        "quantity": 2,
-        "uom": "EA",
-        "unitPrice": 850,
-        "currency": "ILS",
-        "exchangeDate": "",
-        "needByDate": "2026-06-15",
-        "inventoryOrg": 1,
-        "buyer": "B1",
-        "serviceApprover": "manager1",
-        "qualityRequirement": "לא נדרשת ביקורת",
-        "distributions": [
-          {
-            "id": 101,
-            "quantity": 2,
-            "percentage": 100,
-            "rate": 1,
-            "functionalAmount": 1700,
-            "projectId": "",
-            "taskId": "",
-            "expenditureTypeId": "",
-            "expenditureOrgId": 1
-          }
-        ]
-      }
-    ]
-  },
-  { 
-    "id": 2, 
-    "username": "hadas", 
-    "firstName": "הדס", 
-    "gender": "female", 
-    "supervisor": 5,
-    "job": "ראש תחום",
-    "organizations": [11],
-    "cart": [] 
-  },
-  { 
-    "id": 3, 
-    "username": "era", 
-    "firstName": "אירה", 
-    "gender": "female", 
-    "supervisor": 2,
-    "job": "ראש מדור",
-    "organizations": [11],
-    "cart": [] 
-  },
-  { 
-    "id": 4, 
-    "username": "rachel", 
-    "firstName": "רחל", 
-    "gender": "female", 
-    "supervisor": 6,
-    "job": "מתכנתת",
-    "organizations": [11],
-    "cart": [] 
-  },
-  { 
-    "id": 5, 
-    "username": "moshe", 
-    "firstName": "משה ז", 
-    "gender": "male", 
-    "supervisor": 8,
-    "job": "ראש מחלקה",
-    "organizations": [11],
-    "cart": [] 
-  },
-  { 
-    "id": 6, 
-    "username": "nir", 
-    "firstName": "ניר", 
-    "gender": "male", 
-    "supervisor": 7,
-    "job": "ראש תחום",
-    "organizations": [11],
-    "cart": [] 
-  },
-  { 
-    "id": 7, 
-    "username": "oren", 
-    "firstName": "אורן ד",
-    "gender": "male",
-    "supervisor": 8,
-    "job": "ראש מחלקה",
-    "organizations": [11],
-    "cart": [] 
-  },
-  { 
-    "id": 8, 
-    "username": "moshel", 
-    "firstName": "משה ל",
-    "gender": "male",
-    "supervisor": 7,
-    "job": "ראש שטח",
-    "organizations": [11],
-    "cart": [] 
-  },
-  { 
-    "id": 9, 
-    "username": "asaf", 
-    "firstName": "אסף", 
-    "gender": "male",
-    "supervisor": null,
-    "job": "מבט",
-    "organizations": [3,11],
-    "cart": []
-  },
-  { 
-    "id": 10, 
-    "username": "orenm", 
-    "firstName": "אורן מ",
-    "gender": "male",
-    "supervisor": 9,
-    "job": "מבט",
-    "organizations": [3,11],
-    "cart": []
-  },
-  { 
-    "id": 11, 
-    "username": "itay", 
-    "firstName": "איתי",
-    "gender": "male",
-    "supervisor": 9,
-    "job": "מבט",
-    "organizations": [3,11],
-    "cart": []
-  },
-  { 
-    "id": 12, 
-    "username": "aviad", 
-    "firstName": "אביעד",
-    "gender": "male",
-    "supervisor": 9,
-    "job": "מבט",
-    "organizations": [3,11],
-    "cart": []
-  },
-  { 
-    "id": 13, 
-    "username": "adik", 
-    "firstName": "עדי ק",
-    "gender": "male",
-    "supervisor": 9,
-    "job": "מבט",
-    "organizations": [3,11],
-    "cart": []
-  },
-  { 
-    "id": 14, 
-    "username": "adid", 
-    "firstName": "עדי ד",
-    "gender": "female",
-    "supervisor": 7,
-    "job": "מנהל כוב",
-    "organizations": [11],
-    "cart": []
-  },
-  { 
-    "id": 15, 
-    "username": "yefet", 
-    "firstName": "יפת",
-    "gender": "male",
-    "supervisor": 7,
-    "job": "סגן לתפעול",
-    "organizations": [11],
-    "cart": []
-  },
-  { 
-    "id": 16, 
-    "username": "avihay", 
-    "firstName": "אביחי",
-    "gender": "male",
-    "supervisor": null,
-    "job": "מומחה בטיחות",
-    "organizations": [3,11],
-    "cart": []
-  }
-
-],
+    {
+      "id": 1,
+      "username": "oz",
+      "firstName": "עוז",
+      "gender": "male",
+      "supervisor": 3,
+      "job": "מיישם",
+      "organizations": [1, 2],
+      "preferences": {
+        "defaultOrg": 1,
+        "defaultDest": "Inventory",
+        "defaultSubInv": "ACCEPTED",
+        "defaultProject": 1,
+        "defaultTask": 1,
+        "defaultExpType": "",
+        "defaultExpOrg": ""
+      },
+      "cart": []
+    },
+    {
+      "id": 2,
+      "username": "hadas",
+      "firstName": "הדס",
+      "gender": "female",
+      "supervisor": 5,
+      "job": "ראש תחום",
+      "organizations": [11],
+      "cart": []
+    },
+    {
+      "id": 3,
+      "username": "era",
+      "firstName": "אירה",
+      "gender": "female",
+      "supervisor": 2,
+      "job": "ראש מדור",
+      "organizations": [11],
+      "preferences": {
+        "defaultOrg": 11,
+        "defaultDest": "Expense",
+        "defaultSubInv": "",
+        "defaultProject": 4,
+        "defaultTask": 5,
+        "defaultExpType": 1,
+        "defaultExpOrg": 11
+      },
+      "cart": []
+    },
+    {
+      "id": 4,
+      "username": "rachel",
+      "firstName": "רחל",
+      "gender": "female",
+      "supervisor": 6,
+      "job": "מתכנתת",
+      "organizations": [11],
+      "preferences": {
+        "defaultOrg": 11,
+        "defaultDest": "Inventory",
+        "defaultSubInv": "EQUIPMENT",
+        "defaultProject": 5,
+        "defaultTask": 7,
+        "defaultExpType": "",
+        "defaultExpOrg": ""
+      },
+      "cart": []
+    },
+    {
+      "id": 5,
+      "username": "moshe",
+      "firstName": "משה ז",
+      "gender": "male",
+      "supervisor": 8,
+      "job": "ראש מחלקה",
+      "organizations": [11],
+      "preferences": {
+        "defaultOrg": 11,
+        "defaultDest": "Expense",
+        "defaultSubInv": "",
+        "defaultProject": 4,
+        "defaultTask": 6,
+        "defaultExpType": 3,
+        "defaultExpOrg": 11
+      },
+      "cart": []
+    },
+    {
+      "id": 6,
+      "username": "nir",
+      "firstName": "ניר",
+      "gender": "male",
+      "supervisor": 7,
+      "job": "ראש תחום",
+      "organizations": [11],
+      "preferences": {
+        "defaultOrg": 11,
+        "defaultDest": "Expense",
+        "defaultSubInv": "",
+        "defaultProject": 5,
+        "defaultTask": 7,
+        "defaultExpType": 2,
+        "defaultExpOrg": 11
+      },
+      "cart": []
+    },
+    {
+      "id": 7,
+      "username": "oren",
+      "firstName": "אורן ד",
+      "gender": "male",
+      "supervisor": 8,
+      "job": "ראש מחלקה",
+      "organizations": [11],
+      "preferences": {
+        "defaultOrg": 11,
+        "defaultDest": "Inventory",
+        "defaultSubInv": "ACCEPTED",
+        "defaultProject": 4,
+        "defaultTask": 5,
+        "defaultExpType": "",
+        "defaultExpOrg": ""
+      },
+      "cart": []
+    },
+    {
+      "id": 8,
+      "username": "moshel",
+      "firstName": "משה ל",
+      "gender": "male",
+      "supervisor": 7,
+      "job": "ראש שטח",
+      "organizations": [11],
+      "preferences": {
+        "defaultOrg": 11,
+        "defaultDest": "Expense",
+        "defaultSubInv": "",
+        "defaultProject": 4,
+        "defaultTask": 5,
+        "defaultExpType": 1,
+        "defaultExpOrg": 11
+      },
+      "cart": []
+    },
+    {
+      "id": 9,
+      "username": "asaf",
+      "firstName": "אסף",
+      "gender": "male",
+      "supervisor": null,
+      "job": "מבט",
+      "organizations": [3, 11],
+      "preferences": {
+        "defaultOrg": 3,
+        "defaultDest": "Inventory",
+        "defaultSubInv": "ACCEPTED",
+        "defaultProject": 1,
+        "defaultTask": 2,
+        "defaultExpType": "",
+        "defaultExpOrg": ""
+      },
+      "cart": []
+    },
+    {
+      "id": 10,
+      "username": "orenm",
+      "firstName": "אורן מ",
+      "gender": "male",
+      "supervisor": 9,
+      "job": "מבט",
+      "organizations": [3, 11],
+      "preferences": {
+        "defaultOrg": 3,
+        "defaultDest": "Expense",
+        "defaultSubInv": "",
+        "defaultProject": 3,
+        "defaultTask": 4,
+        "defaultExpType": 1,
+        "defaultExpOrg": 3
+      },
+      "cart": []
+    },
+    {
+      "id": 11,
+      "username": "itay",
+      "firstName": "איתי",
+      "gender": "male",
+      "supervisor": 9,
+      "job": "מבט",
+      "organizations": [3, 11],
+      "preferences": {
+        "defaultOrg": 11,
+        "defaultDest": "Inventory",
+        "defaultSubInv": "EQUIPMENT",
+        "defaultProject": 5,
+        "defaultTask": 7,
+        "defaultExpType": "",
+        "defaultExpOrg": ""
+      },
+      "cart": []
+    },
+    {
+      "id": 12,
+      "username": "aviad",
+      "firstName": "אביעד",
+      "gender": "male",
+      "supervisor": 9,
+      "job": "מבט",
+      "organizations": [3, 11],
+      "preferences": {
+        "defaultOrg": 11,
+        "defaultDest": "Expense",
+        "defaultSubInv": "",
+        "defaultProject": 4,
+        "defaultTask": 6,
+        "defaultExpType": 3,
+        "defaultExpOrg": 11
+      },
+      "cart": []
+    },
+    {
+      "id": 13,
+      "username": "adik",
+      "firstName": "עדי ק",
+      "gender": "male",
+      "supervisor": 9,
+      "job": "מבט",
+      "organizations": [3, 11],
+      "preferences": {
+        "defaultOrg": 3,
+        "defaultDest": "Expense",
+        "defaultSubInv": "",
+        "defaultProject": 1,
+        "defaultTask": 1,
+        "defaultExpType": 3,
+        "defaultExpOrg": 3
+      },
+      "cart": []
+    },
+    {
+      "id": 14,
+      "username": "adid",
+      "firstName": "עדי ד",
+      "gender": "female",
+      "supervisor": 7,
+      "job": "מנהל כוב",
+      "organizations": [11],
+      "preferences": {
+        "defaultOrg": 11,
+        "defaultDest": "Expense",
+        "defaultSubInv": "",
+        "defaultProject": 5,
+        "defaultTask": 7,
+        "defaultExpType": 2,
+        "defaultExpOrg": 11
+      },
+      "cart": []
+    },
+    {
+      "id": 15,
+      "username": "yefet",
+      "firstName": "יפת",
+      "gender": "male",
+      "supervisor": 7,
+      "job": "סגן לתפעול",
+      "organizations": [11],
+      "preferences": {
+        "defaultOrg": 11,
+        "defaultDest": "Inventory",
+        "defaultSubInv": "ACCEPTED",
+        "defaultProject": 4,
+        "defaultTask": 6,
+        "defaultExpType": "",
+        "defaultExpOrg": ""
+      },
+      "cart": []
+    },
+    {
+      "id": 16,
+      "username": "avihay",
+      "firstName": "אביחי",
+      "gender": "male",
+      "supervisor": null,
+      "job": "מומחה בטיחות",
+      "organizations": [3, 11],
+      "preferences": {
+        "defaultOrg": 3,
+        "defaultDest": "Expense",
+        "defaultSubInv": "",
+        "defaultProject": 3,
+        "defaultTask": 4,
+        "defaultExpType": 3,
+        "defaultExpOrg": 3
+      },
+      "cart": []
+    }
+  ],
   "inventoryOrganizations": [
     { "id": 1, "code": "M1", "name": "מנו\"ר" },
     { "id": 2, "code": "39", "name": "מפ\"ה" },
@@ -205,6 +307,28 @@
     { "id": 9, "code": "1B", "name": "חימוש 6" },
     { "id": 10, "code": "70", "name": "מט\"ל" },
     { "id": 11, "code": "C0", "name": "מטכ\"ם" }
+  ],
+  "subInventories": [
+    { "id": 1, "inventoryOrgId": 1, "code": "ACCEPTED", "name": "מלאי שמיש" },
+    { "id": 2, "inventoryOrgId": 1, "code": "EQUIPMENT", "name": "מחסן ציוד" },
+    { "id": 3, "inventoryOrgId": 2, "code": "ACCEPTED", "name": "מלאי שמיש" },
+    { "id": 4, "inventoryOrgId": 2, "code": "EQUIPMENT", "name": "מחסן ציוד" },
+    { "id": 5, "inventoryOrgId": 3, "code": "ACCEPTED", "name": "מלאי שמיש" },
+    { "id": 6, "inventoryOrgId": 3, "code": "EQUIPMENT", "name": "מחסן ציוד" },
+    { "id": 7, "inventoryOrgId": 4, "code": "ACCEPTED", "name": "מלאי שמיש" },
+    { "id": 8, "inventoryOrgId": 4, "code": "EQUIPMENT", "name": "מחסן ציוד" },
+    { "id": 9, "inventoryOrgId": 5, "code": "ACCEPTED", "name": "מלאי שמיש" },
+    { "id": 10, "inventoryOrgId": 5, "code": "EQUIPMENT", "name": "מחסן ציוד" },
+    { "id": 11, "inventoryOrgId": 6, "code": "ACCEPTED", "name": "מלאי שמיש" },
+    { "id": 12, "inventoryOrgId": 6, "code": "EQUIPMENT", "name": "מחסן ציוד" },
+    { "id": 13, "inventoryOrgId": 7, "code": "ACCEPTED", "name": "מלאי שמיש" },
+    { "id": 14, "inventoryOrgId": 7, "code": "EQUIPMENT", "name": "מחסן ציוד" },
+    { "id": 15, "inventoryOrgId": 9, "code": "ACCEPTED", "name": "מלאי שמיש" },
+    { "id": 16, "inventoryOrgId": 9, "code": "EQUIPMENT", "name": "מחסן ציוד" },
+    { "id": 17, "inventoryOrgId": 10, "code": "ACCEPTED", "name": "מלאי שמיש" },
+    { "id": 18, "inventoryOrgId": 10, "code": "EQUIPMENT", "name": "מחסן ציוד" },
+    { "id": 19, "inventoryOrgId": 11, "code": "ACCEPTED", "name": "מלאי שמיש" },
+    { "id": 20, "inventoryOrgId": 11, "code": "EQUIPMENT", "name": "מחסן ציוד" }
   ],
   "buyers": [
     { "id": "B1", "name": "דביר ישראל" },
@@ -226,16 +350,21 @@
     "נדרשת ביקורת קבלה",
     "פונקצ' אצל המזמין"
   ],
-  "projects": [
+"projects": [
     { "id": 1, "projectCode": "*12345", "projectName": "שדרוג תשתיות מחשוב 2026", "startDate": "2025-01-01", "endDate": "2026-12-31", "allowedExpenditureTypeIds": [1, 3, 4], "inventoryOrgIds": [1, 2, 3, 6, 7] },
     { "id": 2, "projectCode": "R98765", "projectName": "פיתוח מערכת רכש מודרנית", "startDate": "2026-01-01", "endDate": "2027-12-31", "allowedExpenditureTypeIds": [2, 4], "inventoryOrgIds": [1, 4, 10, 5] },
-    { "id": 3, "projectCode": "PM11111", "projectName": "תחזוקת ציוד שוטפת", "startDate": "2020-01-01", "endDate": "2026-08-31", "allowedExpenditureTypeIds": [1, 3], "inventoryOrgIds": [2, 5, 9, 3, 7] }
+    { "id": 3, "projectCode": "PM11111", "projectName": "תחזוקת ציוד שוטפת", "startDate": "2020-01-01", "endDate": "2026-08-31", "allowedExpenditureTypeIds": [1, 3], "inventoryOrgIds": [2, 5, 9, 3, 7] },
+    { "id": 4, "projectCode": "PRJ1101", "projectName": "הקמת מרכז מטכ\"ם", "startDate": "2024-01-01", "endDate": "2027-12-31", "allowedExpenditureTypeIds": [1, 3, 4], "inventoryOrgIds": [11, 3] },
+    { "id": 5, "projectCode": "PRJ1102", "projectName": "מערך תקשורת סיווג", "startDate": "2025-06-01", "endDate": "2028-12-31", "allowedExpenditureTypeIds": [2, 4], "inventoryOrgIds": [11] }
   ],
   "tasks": [
     { "id": 1, "projectId": 1, "taskCode": "123451", "taskName": "רכש חומרה מרכזית", "startDate": "2025-01-01", "endDate": "2026-12-31" },
     { "id": 2, "projectId": 1, "taskCode": "123452", "taskName": "רישוי תוכנה", "startDate": "2025-06-01", "endDate": "2026-12-31" },
     { "id": 3, "projectId": 2, "taskCode": "987651", "taskName": "אפיון ועיצוב", "startDate": "2026-01-01", "endDate": "2026-06-30" },
-    { "id": 4, "projectId": 3, "taskCode": "111111", "taskName": "תמיכה שוטפת - כללי", "startDate": "2020-01-01", "endDate": "2026-08-31" }
+    { "id": 4, "projectId": 3, "taskCode": "111111", "taskName": "תמיכה שוטפת - כללי", "startDate": "2020-01-01", "endDate": "2026-08-31" },
+    { "id": 5, "projectId": 4, "taskCode": "110101", "taskName": "תשתיות בינוי", "startDate": "2024-01-01", "endDate": "2027-12-31" },
+    { "id": 6, "projectId": 4, "taskCode": "110102", "taskName": "ציוד וריהוט", "startDate": "2024-06-01", "endDate": "2027-12-31" },
+    { "id": 7, "projectId": 5, "taskCode": "110201", "taskName": "התקנת נתבים", "startDate": "2025-06-01", "endDate": "2028-12-31" }
   ],
   "expenditureTypes": [
     { "id": 1, "expenditureTypeCode": "61200000", "name": "רכש פריטים להוצאה", "startDate": "2020-01-01", "endDate": "2030-12-31" },

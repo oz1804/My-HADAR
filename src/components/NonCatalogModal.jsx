@@ -1,13 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import data from '../data/data.json';
 
-export default function NonCatalogModal({ isOpen, onClose, onAddToCart, onQuickOrder, currentUser }) {
+export default function NonCatalogModal({ 
+  isOpen, 
+  onClose, 
+  onAddToCart, 
+  onQuickOrder, 
+  currentUser, 
+  globalDestType,
+  globalSubInv,
+  globalProject,   // <--- קבלה כדי למנוע אזהרות מ-React
+  globalTask,      // <--- קבלה כדי למנוע אזהרות מ-React
+  globalExpType,   // <--- קבלה כדי למנוע אזהרות מ-React
+  globalExpOrg     // <--- קבלה כדי למנוע אזהרות מ-React
+}) {
   
   // --- ניהול הסטייט (מצבי הטופס) ---
   const [requester, setRequester] = useState(currentUser?.id || '');
   const [lineType, setLineType] = useState('טובין');
   const [description, setDescription] = useState('');
-  const [destinationType, setDestinationType] = useState('Inventory');
+  
+  // שימוש בברירת המחדל הגלובלית ליעד הדרישה
+  const [destinationType, setDestinationType] = useState(globalDestType || 'Expense');
+  
   const [uom, setUom] = useState('EA');
   const [unitPrice, setUnitPrice] = useState('');
   const [quantity, setQuantity] = useState(1);
@@ -16,6 +31,14 @@ export default function NonCatalogModal({ isOpen, onClose, onAddToCart, onQuickO
   const [rate, setRate] = useState(1);
   const [serviceApprover, setServiceApprover] = useState('');
   const [buyer, setBuyer] = useState('');
+  
+  // תוספת שדות ארגון מלאי ומחסן
+  const [inventoryOrg, setInventoryOrg] = useState('');
+  
+  // אתחול המחסן מההגדרות הגלובליות רק אם היעד הוא מלאי!
+  const [subInventory, setSubInventory] = useState(
+    (globalDestType === 'Inventory' && globalSubInv) ? globalSubInv : ''
+  );
   
   const [isFavorite, setIsFavorite] = useState(false);
   
@@ -27,11 +50,16 @@ export default function NonCatalogModal({ isOpen, onClose, onAddToCart, onQuickO
   useEffect(() => {
     if (lineType === 'שירות') {
       setDestinationType('Expense');
+      setSubInventory(''); // איפוס במעבר להוצאה
     } else {
-      // ניקוי שגיאת מאשר שירות אם חוזרים לטובין
       setInvalidFields(prev => prev.filter(f => f !== 'serviceApprover'));
     }
   }, [lineType]);
+
+  // --- לוגיקה אוטומטית: איפוס מחסן כשמשנים ארגון מלאי ---
+  useEffect(() => {
+    setSubInventory('');
+  }, [inventoryOrg]);
 
   // --- לוגיקה אוטומטית: שליפת שער חליפין ברירת מחדל בעת שינוי מטבע ---
   useEffect(() => {
@@ -69,7 +97,15 @@ export default function NonCatalogModal({ isOpen, onClose, onAddToCart, onQuickO
     if (!isOpen) {
       setLineType('טובין');
       setDescription('');
-      setDestinationType('Inventory');
+      
+      // איפוס חזרה לברירת המחדל הגלובלית!
+      setDestinationType(globalDestType || 'Expense');
+      
+      setInventoryOrg('');
+      
+      // איפוס המחסן לברירת המחדל הגלובלית אם היעד הוא מלאי
+      setSubInventory((globalDestType === 'Inventory' && globalSubInv) ? globalSubInv : '');
+      
       setUom('EA');
       setUnitPrice('');
       setQuantity(1);
@@ -81,7 +117,7 @@ export default function NonCatalogModal({ isOpen, onClose, onAddToCart, onQuickO
       setErrorMessage(''); 
       setInvalidFields([]);
     }
-  }, [isOpen]);
+  }, [isOpen, globalDestType, globalSubInv]);
 
   if (!isOpen) return null;
 
@@ -93,13 +129,17 @@ export default function NonCatalogModal({ isOpen, onClose, onAddToCart, onQuickO
     }
   };
 
-  // פונקציית הוולידציה המעודכנת שמאתרת את כל השדות החסרים
+  // פונקציית הוולידציה המעודכנת שמאתרת את כל השדות החסרים כולל מחסן וארגון
   const validateForm = () => {
     let missing = [];
     
     if (!description.trim()) missing.push('description');
     if (!quantity || Number(quantity) <= 0) missing.push('quantity');
     if (!unitPrice || Number(unitPrice) < 0) missing.push('unitPrice');
+    
+    // ארגון מלאי הוא חובה תמיד ללא קשר ליעד הדרישה.
+    if (!inventoryOrg) missing.push('inventoryOrg');
+
     if (lineType === 'שירות' && !serviceApprover) missing.push('serviceApprover');
 
     if (missing.length > 0) {
@@ -119,6 +159,8 @@ export default function NonCatalogModal({ isOpen, onClose, onAddToCart, onQuickO
     lineType,
     description,
     destinationType,
+    inventoryOrg: inventoryOrg ? Number(inventoryOrg) : null,
+    subInventory: destinationType === 'Inventory' ? subInventory : null,
     uom,
     unitPrice: Number(unitPrice),
     quantity: Number(quantity),
@@ -203,13 +245,65 @@ export default function NonCatalogModal({ isOpen, onClose, onAddToCart, onQuickO
               ></textarea>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">יעד הדרישה</label>
-              <select value={destinationType} onChange={(e) => setDestinationType(e.target.value)} disabled={lineType === 'שירות'} className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none ${lineType === 'שירות' ? 'bg-gray-200 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' : 'bg-gray-50 dark:bg-gray-900/50 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'}`}>
-                <option value="Inventory">מלאי (Inventory)</option>
-                <option value="Expense">הוצאה (Expense)</option>
-              </select>
+            {/* בלוק יעד דרישה, ארגון מלאי ומחסן */}
+            <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-5 p-4 bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl border border-gray-100 dark:border-gray-700/50">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">יעד הדרישה</label>
+                <select 
+                  value={destinationType} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setDestinationType(val);
+                    if (val === 'Expense') {
+                      setSubInventory(''); // מאפס את המחסן אם עוברים להוצאה
+                    }
+                  }} 
+                  disabled={lineType === 'שירות'} 
+                  className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none ${lineType === 'שירות' ? 'bg-gray-200 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'}`}
+                >
+                  <option value="Inventory">מלאי (Inventory)</option>
+                  <option value="Expense">הוצאה (Expense)</option>
+                </select>
+              </div>
+
+              {/* ארגון מלאי תמיד פתוח לבחירה ותמיד חובה */}
+              <div>
+                <label className={`block text-xs font-bold mb-1.5 ${invalidFields.includes('inventoryOrg') ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                  ארגון מלאי <span className="text-red-500">*</span>
+                </label>
+                <select 
+                  value={inventoryOrg} 
+                  onChange={(e) => { setInventoryOrg(e.target.value); clearError('inventoryOrg'); }} 
+                  className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none ${invalidFields.includes('inventoryOrg') ? 'border-red-500 bg-red-50 dark:bg-red-900/10 ring-1 ring-red-500 focus:ring-2 focus:ring-red-500' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'}`}
+                >
+                  <option value="">בחר ארגון...</option>
+                  {data.inventoryOrganizations?.map(org => (
+                    <option key={org.id} value={org.id}>{org.code} - {org.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* שדה מחסן מוצג רק אם היעד הוא מלאי, ואינו חובה */}
+              {destinationType === 'Inventory' && (
+                <div className="animate-fade-in">
+                  <label className={`block text-xs font-bold mb-1.5 ${invalidFields.includes('subInventory') ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                    מחסן (Sub-Inv)
+                  </label>
+                  <select 
+                    value={subInventory} 
+                    onChange={(e) => { setSubInventory(e.target.value); clearError('subInventory'); }} 
+                    disabled={!inventoryOrg} 
+                    className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none ${invalidFields.includes('subInventory') ? 'border-red-500 bg-red-50 dark:bg-red-900/10 ring-1 ring-red-500 focus:ring-2 focus:ring-red-500' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'} ${!inventoryOrg ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <option value="">בחר מחסן...</option>
+                    {data.subInventories?.filter(s => String(s.inventoryOrgId) === String(inventoryOrg)).map(sub => (
+                      <option key={sub.id} value={sub.code}>{sub.name} ({sub.code})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
+
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">יחידת מידה</label>
               <select value={uom} onChange={(e) => setUom(e.target.value)} className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none font-mono">
@@ -218,6 +312,8 @@ export default function NonCatalogModal({ isOpen, onClose, onAddToCart, onQuickO
                 ))}
               </select>
             </div>
+            
+            <div className="hidden md:block"></div> {/* שומר על יישור הרשת (Grid) */}
 
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">כמות <span className="text-red-500">*</span></label>

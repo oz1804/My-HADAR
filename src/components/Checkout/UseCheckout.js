@@ -1,16 +1,26 @@
 import { useState, useEffect } from 'react';
 import data from '../../data/data.json';
 
-export default function useCheckout({ cartLines = [], globalOrg, onRemoveFromCart, currentUser }) {
+export default function useCheckout({ 
+  cartLines = [], 
+  globalOrg, 
+  onRemoveFromCart, 
+  currentUser,
+  globalProject, // <--- קבלת פרויקט גלובלי
+  globalTask,    // <--- קבלת משימה גלובלית
+  globalExpType, // <--- קבלת סוג הוצאה גלובלי
+  globalExpOrg   // <--- קבלת יחידה מממנת גלובלית
+}) {
   const [headerOrg, setHeaderOrg] = useState(String(globalOrg));
   const [buyerNotes, setBuyerNotes] = useState('');
   const [justification, setJustification] = useState('');
   const [headerDescription, setHeaderDescription] = useState('');
   
-  const [headerProjectId, setHeaderProjectId] = useState('');
-  const [headerTaskId, setHeaderTaskId] = useState('');
-  const [headerExpTypeId, setHeaderExpTypeId] = useState('');
-  const [headerExpOrgId, setHeaderExpOrgId] = useState('');
+  // אתחול כותרת הקופה עם הערכים הגלובליים
+  const [headerProjectId, setHeaderProjectId] = useState(globalProject || '');
+  const [headerTaskId, setHeaderTaskId] = useState(globalTask || '');
+  const [headerExpTypeId, setHeaderExpTypeId] = useState(globalExpType || '');
+  const [headerExpOrgId, setHeaderExpOrgId] = useState(globalExpOrg || '');
 
   // --- סטייטים חדשים עבור קניין, מזמין ומאשר שירות ברמת הכותרת ---
   const [headerBuyer, setHeaderBuyer] = useState('');
@@ -35,15 +45,16 @@ export default function useCheckout({ cartLines = [], globalOrg, onRemoveFromCar
           const invOrg = line.inventoryOrg || globalOrg;
           const currentRate = line.rate || 1;
 
+          // שימוש בערכים הגלובליים במידה והכותרת לא הוגדרה, עם הגנה לשורות מלאי
           const createDefaultDist = () => [{
             id: Date.now() + Math.random(),
             quantity: qty,
             percentage: 100,
             functionalAmount: qty * price * currentRate,
-            projectId: headerProjectId || '',
-            taskId: headerTaskId || '',
-            expenditureTypeId: headerExpTypeId || '',
-            expenditureOrgId: headerExpOrgId || invOrg 
+            projectId: headerProjectId || globalProject || '',
+            taskId: headerTaskId || globalTask || '',
+            expenditureTypeId: headerExpTypeId || (line.destinationType === 'Inventory' ? '' : globalExpType) || '',
+            expenditureOrgId: headerExpOrgId || (line.destinationType === 'Inventory' ? '' : globalExpOrg) || invOrg 
           }];
 
           const existingLine = prevLines.find(l => l && l.id === line.id);
@@ -93,7 +104,7 @@ export default function useCheckout({ cartLines = [], globalOrg, onRemoveFromCar
     } else {
       setLines([]);
     }
-  }, [cartLines, globalOrg]);
+  }, [cartLines, globalOrg, globalProject, globalTask, globalExpType, globalExpOrg]);
 
   // בדיקת מצב מעורב (Mixed) עבור ארגון מלאי, תקציב, קניינים, מזמינים ומאשרי שירות
   useEffect(() => {
@@ -262,7 +273,6 @@ export default function useCheckout({ cartLines = [], globalOrg, onRemoveFromCar
       supplier: newLineData.supplier || "",
       qualityRequirement: newLineData.qualityRequirement || "",
       
-      // קליטת קניין, מזמין ומאשר שירות מהשורה המהירה
       serviceApprover: newLineData.serviceApprover || "",
       buyer: newLineData.buyer || "",
       requester: newLineData.requester || "",
@@ -293,7 +303,6 @@ export default function useCheckout({ cartLines = [], globalOrg, onRemoveFromCar
     }
   };
 
-  // --- פונקציות חלחול ---
   const handleHeaderBuyerChange = (buyerId) => {
     setHeaderBuyer(buyerId);
     if (buyerId !== 'mixed') {
@@ -368,15 +377,16 @@ export default function useCheckout({ cartLines = [], globalOrg, onRemoveFromCar
 
       const lastDist = dists[dists.length - 1];
 
+      // שילוב הערכים הגלובליים כ-Fallback בעת יצירת פיצול חדש
       const newDist = {
         id: Date.now() + Math.random(),
         quantity: qtyToUse,
         percentage: line.quantity > 0 ? (qtyToUse / line.quantity) * 100 : 0,
         functionalAmount: qtyToUse * (line.unitPrice || 0) * (line.rate || 1),
-        projectId: lastDist?.projectId || headerProjectId || '',
-        taskId: lastDist?.taskId || headerTaskId || '',
-        expenditureTypeId: lastDist?.expenditureTypeId || headerExpTypeId || '',
-        expenditureOrgId: lastDist?.expenditureOrgId || headerExpOrgId || line.inventoryOrg || headerOrg || ''
+        projectId: lastDist?.projectId || headerProjectId || globalProject || '',
+        taskId: lastDist?.taskId || headerTaskId || globalTask || '',
+        expenditureTypeId: lastDist?.expenditureTypeId || headerExpTypeId || (line.destinationType === 'Inventory' ? '' : globalExpType) || '',
+        expenditureOrgId: lastDist?.expenditureOrgId || headerExpOrgId || (line.destinationType === 'Inventory' ? '' : globalExpOrg) || line.inventoryOrg || headerOrg || ''
       };
 
       return { ...line, distributions: [...dists, newDist] };
@@ -431,21 +441,20 @@ export default function useCheckout({ cartLines = [], globalOrg, onRemoveFromCar
     headerExpOrgId, setHeaderExpOrgId,
     headerBuyer, setHeaderBuyer,             
     headerRequester, setHeaderRequester,     
-    headerServiceApprover, setHeaderServiceApprover, // ייצוא הסטייט החדש
+    headerServiceApprover, setHeaderServiceApprover, 
     lines, setLines,
     selectedLineIds, setSelectedLineIds,
     isBudgetMixed, setIsBudgetMixed,
     cartTotal,
     hasExpenseLines,
     
-    // Functions
     handleLineFieldChange,
     handleApplyBulkEdit,
     handleAddNewLine,
     handleHeaderOrgChange,
     handleHeaderBuyerChange,         
     handleHeaderRequesterChange,     
-    handleHeaderServiceApproverChange, // ייצוא פונקציית החלחול החדשה
+    handleHeaderServiceApproverChange, 
     handleHeaderBudgetChange,
     handleHeaderNotesChange,
     handleHeaderJustificationChange,
