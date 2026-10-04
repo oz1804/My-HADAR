@@ -99,8 +99,11 @@ export default function CatalogItemRow({
           
           {/* כפתור 1: הוספה/הסרה ממועדפים (ממוקם מעל כולם בפינה בנייד) */}
           <button 
-            onClick={() => onToggleFavorite && onToggleFavorite(item.id)}
-            className={`absolute top-2 left-2 p-1.5 rounded-full border transition-all cursor-pointer z-10 sm:relative sm:top-auto sm:left-auto sm:rounded-xl sm:p-2 sm:h-full sm:w-9 sm:flex sm:items-center sm:justify-center ${
+            onClick={(e) => {
+              e.stopPropagation(); // מונע כניסה לדף הפריט בעת לחיצה על הלב
+              if (onToggleFavorite) onToggleFavorite(item.id);
+            }}
+            className={`absolute top-2 left-2 p-1.5 rounded-full border transition-all duration-300 cursor-pointer hover:scale-110 active:scale-95 z-10 sm:relative sm:top-auto sm:left-auto sm:rounded-xl sm:p-2 sm:h-full sm:w-9 sm:flex sm:items-center sm:justify-center ${
               isFavorite 
                 ? 'bg-rose-100 border-rose-300 text-rose-600 dark:bg-rose-950/50 dark:border-rose-900' 
                 : 'bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-gray-200 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:border-gray-700 dark:hover:bg-gray-700'

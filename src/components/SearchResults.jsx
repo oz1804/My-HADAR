@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import data from '../data/data.json'; 
 import CatalogItemRow from './CatalogItemRow';
-import CatalogItemCard from './CatalogItemCard'; // הייבוא החדש לכרטיסייה
+import CatalogItemCard from './CatalogItemCard'; 
 
 export default function SearchResults({ 
   query, 
@@ -10,7 +10,7 @@ export default function SearchResults({
   onAddToCart, 
   onQuickOrder,
   favoriteItems = [],
-  onToggleFavorite
+  toggleFavorite // התיקון (השם תואם למה שנשלח מ-App.jsx)
 }) {
   const [selectedMfrs, setSelectedMfrs] = useState([]);
   
@@ -188,7 +188,7 @@ export default function SearchResults({
                     item={item}
                     onAddToCart={onAddToCart}
                     onQuickOrder={onQuickOrder}
-                    onToggleFavorite={onToggleFavorite}
+                    onToggleFavorite={toggleFavorite} // התיקון: מעביר את הפונקציה התקינה
                     isFavorite={favoriteItems.includes(item.id)}
                     onNavigate={onNavigate}
                   />
@@ -202,7 +202,7 @@ export default function SearchResults({
                     item={item}
                     onAddToCart={onAddToCart}
                     onQuickOrder={onQuickOrder}
-                    onToggleFavorite={onToggleFavorite}
+                    onToggleFavorite={toggleFavorite} // התיקון: מעביר את הפונקציה התקינה
                     isFavorite={favoriteItems.includes(item.id)}
                     onNavigate={onNavigate}
                   />

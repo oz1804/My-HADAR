@@ -10,17 +10,39 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
     if (isOpen) {
       const initialSteps = [];
 
-      const supervisor = data.users.find(u => u.id === currentUser.supervisor);
-      if (supervisor) {
-        initialSteps.push({
-          id: `supervisor-${supervisor.id}`,
-          title: 'אישור ממונה ישיר',
-          name: `${supervisor.firstName} ${supervisor.lastName || ''}`.trim(),
-          role: supervisor.job || 'ממונה',
-          status: 'pending'
+      // קריאת רשימת מאשרים מועדפת מהזיכרון
+      const storedPrefs = JSON.parse(localStorage.getItem('appPreferences')) || {};
+      const userPrefs = storedPrefs[currentUser.id] || {};
+      const preferredApprovers = userPrefs.preferredApprovers || [];
+
+      if (preferredApprovers.length > 0) {
+        preferredApprovers.forEach(userId => {
+          const approverObj = data.users.find(u => String(u.id) === String(userId));
+          if (approverObj) {
+            initialSteps.push({
+              id: `preferred-${approverObj.id}-${Math.random()}`,
+              title: 'אישור מועדף',
+              name: `${approverObj.firstName} ${approverObj.lastName || ''}`.trim(),
+              role: approverObj.job || 'צוות ארגוני',
+              status: 'pending'
+            });
+          }
         });
+      } else {
+        // Fallback לממונה הישיר אם אין רשימה
+        const supervisor = data.users.find(u => u.id === currentUser.supervisor);
+        if (supervisor) {
+          initialSteps.push({
+            id: `supervisor-${supervisor.id}`,
+            title: 'אישור ממונה ישיר',
+            name: `${supervisor.firstName} ${supervisor.lastName || ''}`.trim(),
+            role: supervisor.job || 'ממונה',
+            status: 'pending'
+          });
+        }
       }
 
+      // הוספת קניינים
       const allBuyerIds = new Set();
       if (headerBuyer && headerBuyer !== 'mixed') allBuyerIds.add(headerBuyer);
       lines.forEach(line => {
@@ -156,9 +178,10 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
               אין מאשרים בסבב הנוכחי.
             </div>
           ) : (
-            <div className="relative border-r-2 border-blue-100 dark:border-blue-900/30 mr-2 pr-8 space-y-6">
+            <div className="relative border-r-2 border-indigo-100 dark:border-indigo-900/30 mr-2 pr-8 space-y-6">
               {routingSteps.map((step, idx) => {
                 const isBuyer = step.id.startsWith('buyer-');
+                const initial = step.name ? step.name.charAt(0) : '?';
                 
                 return (
                   <div 
@@ -170,35 +193,47 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
                     onDragEnd={handleDragEnd}
                     onDragOver={handleDragOver}
                   >
-                    <div className={`absolute right-0 -mr-[41px] top-3 flex items-center justify-center w-6 h-6 border-2 rounded-full z-10 shadow-sm transition-colors ${isBuyer ? 'bg-purple-50 border-purple-500 dark:bg-gray-800' : 'bg-white dark:bg-gray-800 border-blue-500'}`}>
-                       <span className={`text-[10px] font-black ${isBuyer ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400'}`}>{idx + 1}</span>
+                    {/* ציר זמן */}
+                    <div className={`absolute right-0 -mr-[41px] top-3 flex items-center justify-center w-6 h-6 border-2 rounded-full z-10 shadow-sm transition-colors bg-white dark:bg-gray-800 ${isBuyer ? 'border-purple-500' : 'border-indigo-500'}`}>
+                       <span className={`text-[10px] font-black ${isBuyer ? 'text-purple-600 dark:text-purple-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{idx + 1}</span>
                     </div>
                     
-                    <div className={`relative bg-white dark:bg-gray-800/40 border ${draggedIndex === idx ? 'border-blue-400 border-dashed bg-blue-50/50 dark:bg-blue-900/30' : 'border-gray-100 dark:border-gray-700'} p-4 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group-hover:border-blue-200 dark:group-hover:border-blue-800/50`}>
+                    {/* כרטיסייה נגררת */}
+                    <div className={`relative bg-white dark:bg-gray-800/40 border ${draggedIndex === idx ? (isBuyer ? 'border-purple-400 border-dashed bg-purple-50/50 dark:bg-purple-900/30' : 'border-indigo-400 border-dashed bg-indigo-50/50 dark:bg-indigo-900/30') : 'border-gray-100 dark:border-gray-700'} p-4 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group-hover:${isBuyer ? 'border-purple-200 dark:border-purple-800/50' : 'border-indigo-200 dark:border-indigo-800/50'} flex justify-between items-center`}>
                       
-                      <div className="absolute top-1/2 -translate-y-1/2 right-2 text-gray-300 dark:text-gray-600 opacity-50 group-hover:opacity-100 transition-opacity">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6h16.5" />
-                        </svg>
+                      <div className="flex items-center gap-4 pointer-events-none">
+                        <div className={`w-10 h-10 rounded-full bg-gradient-to-br flex items-center justify-center font-black text-sm border shrink-0 ${isBuyer ? 'from-purple-100 to-pink-100 dark:from-purple-900/40 dark:to-pink-900/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/50' : 'from-indigo-100 to-blue-100 dark:from-indigo-900/40 dark:to-blue-900/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/50'}`}>
+                          {initial}
+                        </div>
+                        <div>
+                          <span className={`text-[10px] font-black uppercase tracking-widest ${isBuyer ? 'text-purple-600 dark:text-purple-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{step.title}</span>
+                          <div className="font-bold text-gray-900 dark:text-white text-base leading-tight">
+                            {step.name}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {step.role}
+                          </div>
+                        </div>
                       </div>
 
-                      {!isBuyer && (
-                        <button 
-                          onClick={() => handleRemoveApprover(step.id)}
-                          className="absolute top-3 left-3 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors cursor-pointer"
-                          title="הסר מאשר"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      )}
-
-                      <div className="pr-6 pl-8 pointer-events-none">
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${isBuyer ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400'}`}>{step.title}</span>
-                        <h4 className="text-base font-bold text-gray-900 dark:text-white mt-1">{step.name}</h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{step.role}</p>
+                      <div className="flex items-center gap-3">
+                        {!isBuyer && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleRemoveApprover(step.id); }}
+                            className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors cursor-pointer"
+                            title="הסר מאשר"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        )}
+                        <div className="text-gray-300 dark:text-gray-600 opacity-50 group-hover:opacity-100 transition-opacity">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6h16.5" />
+                          </svg>
+                        </div>
                       </div>
+
                     </div>
-
                   </div>
                 );
               })}
@@ -238,7 +273,6 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
             className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-sm shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={routingSteps.length === 0}
             onClick={() => { 
-              // מעביר את הנתונים למעלה לפני סגירה
               if (onSubmitApproval) onSubmitApproval(routingSteps);
               onClose(); 
             }}

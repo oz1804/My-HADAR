@@ -6,13 +6,14 @@ export default function NonCatalogModal({
   onClose, 
   onAddToCart, 
   onQuickOrder, 
+  onSaveFavorite, // <--- הפונקציה החדשה לשמירת פריט חופשי כמועדף
   currentUser, 
   globalDestType,
   globalSubInv,
-  globalProject,   // <--- קבלה כדי למנוע אזהרות מ-React
-  globalTask,      // <--- קבלה כדי למנוע אזהרות מ-React
-  globalExpType,   // <--- קבלה כדי למנוע אזהרות מ-React
-  globalExpOrg     // <--- קבלה כדי למנוע אזהרות מ-React
+  globalProject,   
+  globalTask,      
+  globalExpType,   
+  globalExpOrg     
 }) {
   
   // --- ניהול הסטייט (מצבי הטופס) ---
@@ -97,15 +98,9 @@ export default function NonCatalogModal({
     if (!isOpen) {
       setLineType('טובין');
       setDescription('');
-      
-      // איפוס חזרה לברירת המחדל הגלובלית!
       setDestinationType(globalDestType || 'Expense');
-      
       setInventoryOrg('');
-      
-      // איפוס המחסן לברירת המחדל הגלובלית אם היעד הוא מלאי
       setSubInventory((globalDestType === 'Inventory' && globalSubInv) ? globalSubInv : '');
-      
       setUom('EA');
       setUnitPrice('');
       setQuantity(1);
@@ -114,6 +109,7 @@ export default function NonCatalogModal({
       setRate(1);
       setServiceApprover('');
       setBuyer('');
+      setIsFavorite(false); // איפוס מצב הלב
       setErrorMessage(''); 
       setInvalidFields([]);
     }
@@ -121,7 +117,6 @@ export default function NonCatalogModal({
 
   if (!isOpen) return null;
 
-  // פונקציית עזר לניקוי שגיאות משדה ספציפי בעת הקלדה
   const clearError = (fieldName) => {
     setErrorMessage('');
     if (invalidFields.includes(fieldName)) {
@@ -129,17 +124,13 @@ export default function NonCatalogModal({
     }
   };
 
-  // פונקציית הוולידציה המעודכנת שמאתרת את כל השדות החסרים כולל מחסן וארגון
   const validateForm = () => {
     let missing = [];
     
     if (!description.trim()) missing.push('description');
     if (!quantity || Number(quantity) <= 0) missing.push('quantity');
     if (!unitPrice || Number(unitPrice) < 0) missing.push('unitPrice');
-    
-    // ארגון מלאי הוא חובה תמיד ללא קשר ליעד הדרישה.
     if (!inventoryOrg) missing.push('inventoryOrg');
-
     if (lineType === 'שירות' && !serviceApprover) missing.push('serviceApprover');
 
     if (missing.length > 0) {
@@ -181,6 +172,30 @@ export default function NonCatalogModal({
     if (!validateForm()) return;
     onQuickOrder && onQuickOrder(buildLineData());
     onClose();
+  };
+
+  // --- הפונקציה שמופעלת בלחיצה על הלב ---
+  const handleToggleFavorite = () => {
+    if (isFavorite) {
+      // אם כבר היה מועדף והוא לוחץ להסיר - במודל כזה אין לנו כרגע מנגנון הסרה מתוך הטופס עצמו, 
+      // אבל נוכל להחזיר את הסטייט ל-false (ההסרה בפועל תתבצע ממסך המועדפים).
+      setIsFavorite(false);
+    } else {
+      // חייבים וולידציה לפני ששומרים את זה במועדפים!
+      if (!validateForm()) {
+        setErrorMessage("אנא השלם את כל פרטי הפריט (שם, מחיר, ארגון) לפני השמירה כמועדף.");
+        return;
+      }
+      
+      const itemData = buildLineData();
+      // מוסיפים ID וירטואלי ייחודי לפריט החופשי הזה כדי שנוכל לזהות אותו במועדפים
+      itemData.id = `nc-${Date.now()}`; 
+      
+      if (onSaveFavorite) {
+        onSaveFavorite(itemData);
+      }
+      setIsFavorite(true);
+    }
   };
 
   return (
@@ -393,7 +408,11 @@ export default function NonCatalogModal({
         
         {/* Footer */}
         <div className="px-6 py-5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 rounded-b-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
-          <button onClick={() => setIsFavorite(!isFavorite)} className={`flex items-center justify-center p-3 rounded-xl border transition-all cursor-pointer ${isFavorite ? 'bg-rose-100/90 text-rose-600 border-rose-200 dark:bg-rose-900/50 dark:border-rose-800' : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-200 hover:text-rose-500 hover:bg-rose-50 dark:border-gray-600 dark:hover:bg-gray-700'}`}>
+          <button 
+            onClick={handleToggleFavorite} 
+            className={`flex items-center justify-center p-3 rounded-xl border transition-all cursor-pointer ${isFavorite ? 'bg-rose-100/90 text-rose-600 border-rose-200 dark:bg-rose-900/50 dark:border-rose-800' : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-200 hover:text-rose-500 hover:bg-rose-50 dark:border-gray-600 dark:hover:bg-gray-700'}`}
+            title={isFavorite ? "הפריט נשמר כרגע כהעדפה" : "שמור תבנית פריט זה כמועדף"}
+          >
             <svg xmlns="http://www.w3.org/2000/svg" fill={isFavorite ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" /></svg>
           </button>
 

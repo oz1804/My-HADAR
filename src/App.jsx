@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './index.css';
 import data from './data/data.json';
+import { useAppData } from './hooks/useAppData'; // <-- ייבוא ה-Hook שיצרנו
+
 import Login from './components/Login';
 import Navbar from './components/Navbar';
 import MyRequisitions from './components/MyRequisitions';
@@ -16,171 +18,27 @@ import NonCatalogModal from './components/NonCatalogModal';
 import WelcomeModal from './components/WelcomeModal'; 
 
 function App() {
+  // סטייטים של תצוגה בלבד
   const [currentUser, setCurrentUser] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentView, setCurrentView] = useState('home'); 
   const [viewPayload, setViewPayload] = useState(null);
-  
-  // --- סטייטים גלובליים להעדפות משתמש (מתחילים ריקים בכוונה) ---
-  const [globalOrg, setGlobalOrg] = useState(''); 
-  const [globalDestType, setGlobalDestType] = useState('Expense');
-  const [globalSubInv, setGlobalSubInv] = useState(''); 
-  
-  const [globalProject, setGlobalProject] = useState('');
-  const [globalTask, setGlobalTask] = useState('');
-  const [globalExpType, setGlobalExpType] = useState('');
-  const [globalExpOrg, setGlobalExpOrg] = useState('');
-  // -------------------------------------
-
-  const [cartLines, setCartLines] = useState([]);
   const [isNonCatalogOpen, setIsNonCatalogOpen] = useState(false);
-  
-  // חלונית ברוך הבא / בחירת ארגון
   const [showOrgPrompt, setShowOrgPrompt] = useState(false);
-  
-  // --- מערכת Toast גלובלית ואלגנטית ---
   const [toast, setToast] = useState({ show: false, message: '' });
 
   const showToast = (message) => {
     setToast({ show: true, message });
-    setTimeout(() => {
-      setToast({ show: false, message: '' });
-    }, 3000);
-  };
-  // -------------------------------------
-
-  const [requisitions, setRequisitions] = useState(() => {
-    const stored = localStorage.getItem('appRequisitions');
-    return stored ? JSON.parse(stored) : (data.requisitions || []);
-  });
-
-  // טעינת עגלת הקניות השמורה בעת התחברות
-  useEffect(() => {
-    if (currentUser) {
-      const storedCarts = JSON.parse(localStorage.getItem('appCarts')) || {};
-      
-      if (storedCarts[currentUser.id]) {
-        setCartLines(storedCarts[currentUser.id]);
-      } else {
-        const userFromData = data.users.find(
-          u => String(u.id) === String(currentUser.id) || u.username === currentUser.username
-        );
-        setCartLines((userFromData && userFromData.cart) ? userFromData.cart : []);
-      }
-    }
-  }, [currentUser]);
-
-  // --- מערכת העדפות משתמש (User Preferences) ---
-  
-  // 1. טעינת העדפות ברירת המחדל בעת התחברות
-  useEffect(() => {
-    if (currentUser) {
-      const storedPrefs = JSON.parse(localStorage.getItem('appPreferences')) || {};
-      const userPrefs = storedPrefs[currentUser.id] || {};
-      
-      const userFromData = data.users.find(u => String(u.id) === String(currentUser.id));
-      const initialPrefs = userFromData?.preferences; 
-
-      const isOldSave = !userPrefs.hasOwnProperty('defaultProject');
-      const hasNoLocalPrefs = Object.keys(userPrefs).length === 0;
-
-      let activeOrg = '';
-      let activeDest = 'Expense';
-      let activeSubInv = '';
-      let activeProject = '';
-      let activeTask = '';
-      let activeExpType = '';
-      let activeExpOrg = '';
-
-      if (hasNoLocalPrefs || isOldSave) {
-        if (initialPrefs) {
-          activeOrg = initialPrefs.defaultOrg || '';
-          activeDest = initialPrefs.defaultDest || 'Expense';
-          activeSubInv = initialPrefs.defaultSubInv || '';
-          activeProject = initialPrefs.defaultProject || '';
-          activeTask = initialPrefs.defaultTask || '';
-          activeExpType = initialPrefs.defaultExpType || '';
-          activeExpOrg = initialPrefs.defaultExpOrg || '';
-        }
-      } else {
-        activeOrg = userPrefs.defaultOrg || '';
-        activeDest = userPrefs.defaultDest || 'Expense';
-        activeSubInv = userPrefs.defaultSubInv || '';
-        activeProject = userPrefs.defaultProject || '';
-        activeTask = userPrefs.defaultTask || '';
-        activeExpType = userPrefs.defaultExpType || '';
-        activeExpOrg = userPrefs.defaultExpOrg || '';
-      }
-
-      setGlobalOrg(activeOrg);
-      setGlobalDestType(activeDest);
-      setGlobalSubInv(activeSubInv);
-      setGlobalProject(activeProject);
-      setGlobalTask(activeTask);
-      setGlobalExpType(activeExpType);
-      setGlobalExpOrg(activeExpOrg);
-
-      // הקפצת חלונית בחירת ארגון למשתמשים ללא העדפות (דיליי קטן לאנימציה חלקה)
-      if (activeOrg === '') {
-        setTimeout(() => setShowOrgPrompt(true), 300);
-      } else {
-        setShowOrgPrompt(false);
-      }
-
-      storedPrefs[currentUser.id] = {
-        defaultOrg: activeOrg,
-        defaultDest: activeDest,
-        defaultSubInv: activeSubInv,
-        defaultProject: activeProject,
-        defaultTask: activeTask,
-        defaultExpType: activeExpType,
-        defaultExpOrg: activeExpOrg
-      };
-      localStorage.setItem('appPreferences', JSON.stringify(storedPrefs));
-    }
-  }, [currentUser]);
-
-  // 2. פונקציות שמירה אקטיבית
-  const handleSetGlobalOrg = (newVal) => {
-    setGlobalOrg(newVal);
-    updateUserPref('defaultOrg', newVal);
-  };
-  const handleSetGlobalDestType = (newVal) => {
-    setGlobalDestType(newVal);
-    updateUserPref('defaultDest', newVal);
-  };
-  const handleSetGlobalSubInv = (newVal) => {
-    setGlobalSubInv(newVal);
-    updateUserPref('defaultSubInv', newVal);
-  };
-  const handleSetGlobalProject = (newVal) => {
-    setGlobalProject(newVal);
-    updateUserPref('defaultProject', newVal);
-  };
-  const handleSetGlobalTask = (newVal) => {
-    setGlobalTask(newVal);
-    updateUserPref('defaultTask', newVal);
-  };
-  const handleSetGlobalExpType = (newVal) => {
-    setGlobalExpType(newVal);
-    updateUserPref('defaultExpType', newVal);
-  };
-  const handleSetGlobalExpOrg = (newVal) => {
-    setGlobalExpOrg(newVal);
-    updateUserPref('defaultExpOrg', newVal);
+    setTimeout(() => setToast({ show: false, message: '' }), 3000);
   };
 
-  const updateUserPref = (key, value) => {
-    if (currentUser) {
-      const storedPrefs = JSON.parse(localStorage.getItem('appPreferences')) || {};
-      storedPrefs[currentUser.id] = {
-        ...storedPrefs[currentUser.id],
-        [key]: value
-      };
-      localStorage.setItem('appPreferences', JSON.stringify(storedPrefs));
-    }
+  const handleNavigate = (view, payload = null) => {
+    setCurrentView(view);
+    setViewPayload(payload);
   };
-  // -----------------------------------------------------------
+
+  // "שואבים" את כל הלוגיקה העסקית מה-Hook שלנו!
+  const appData = useAppData(currentUser, showToast, handleNavigate, setShowOrgPrompt);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
@@ -190,233 +48,8 @@ function App() {
     setCurrentUser(null);
     setCurrentView('home'); 
     setViewPayload(null);
-    setCartLines([]); 
     setShowOrgPrompt(false);
-    
-    // איפוס מוחלט בעת התנתקות
-    setGlobalOrg(''); 
-    setGlobalDestType('Expense'); 
-    setGlobalSubInv(''); 
-    setGlobalProject('');
-    setGlobalTask('');
-    setGlobalExpType('');
-    setGlobalExpOrg('');
-  };
-
-  const handleNavigate = (view, payload = null) => {
-    setCurrentView(view);
-    setViewPayload(payload);
-  };
-
-  const updateCartAndSave = (updaterFn) => {
-    setCartLines(prev => {
-      const newCart = typeof updaterFn === 'function' ? updaterFn(prev) : updaterFn;
-      if (currentUser) {
-        const storedCarts = JSON.parse(localStorage.getItem('appCarts')) || {};
-        storedCarts[currentUser.id] = newCart;
-        localStorage.setItem('appCarts', JSON.stringify(storedCarts));
-      }
-      return newCart;
-    });
-  };
-
-  const updateLineQty = (lineId, newQty) => {
-    updateCartAndSave(prev => {
-      if (newQty === 0) {
-        return prev.filter(line => line.id !== lineId);
-      }
-      return prev.map(line => {
-        if (line.id !== lineId) return line;
-        
-        const updatedLine = { ...line, quantity: newQty };
-        if (updatedLine.distributions && updatedLine.distributions.length === 1) {
-          updatedLine.distributions[0].quantity = newQty;
-          updatedLine.distributions[0].percentage = 100;
-          updatedLine.distributions[0].functionalAmount = newQty * (updatedLine.unitPrice || 0) * (updatedLine.distributions[0].rate || 1);
-        }
-        return updatedLine;
-      });
-    });
-  };
-
-  // הוספת פריט קטלוגי לסל
-  const addNewLine = (itemId, initialQty = 1, customDate = null) => {
-    const catalogItem = data.catalogItems.find(i => String(i.id) === String(itemId));
-    
-    const d = new Date();
-    d.setMonth(d.getMonth() + 1);
-    const defaultDate = d.toISOString().split('T')[0];
-    const price = catalogItem.price || 0;
-
-    const newLine = {
-      id: Date.now(),
-      lineNumber: cartLines.length + 1,
-      lineType: "טובין",
-      destinationType: globalDestType,
-      itemId: catalogItem.id,
-      sku: catalogItem.sku,
-      itemDescription: catalogItem.description,
-      quantity: initialQty, 
-      uom: catalogItem.uom || "EA",
-      unitPrice: price,
-      needByDate: customDate || defaultDate, 
-      inventoryOrg: globalDestType === 'Expense' ? null : (globalOrg || ""), 
-      subInventory: globalDestType === 'Expense' ? "" : globalSubInv, 
-      buyer: "",
-      serviceApprover: "",
-      qualityRequirement: "לא נדרשת ביקורת",
-      justification: "",
-      buyerNotes: "",
-      distributions: [
-        {
-          id: Date.now() + 1, 
-          quantity: initialQty, 
-          percentage: 100, 
-          currency: 'ILS', 
-          exchangeDate: '', 
-          rate: 1, 
-          functionalAmount: price * initialQty, 
-          projectId: globalProject, 
-          taskId: globalTask, 
-          expenditureTypeId: globalDestType === 'Inventory' ? '' : globalExpType, 
-          expenditureOrgId: globalDestType === 'Inventory' ? '' : globalExpOrg 
-        }
-      ]
-    };
-    
-    updateCartAndSave(prev => [...prev, newLine]);
-    showToast('הפריט נוסף לסל בהצלחה!');
-  };
-
-  const addNonCatalogLine = (lineData) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 1);
-    const defaultDate = d.toISOString().split('T')[0];
-    
-    const rate = lineData.rate || 1;
-
-    const newLine = {
-      id: Date.now(),
-      lineNumber: cartLines.length + 1,
-      lineType: lineData.lineType,
-      destinationType: lineData.destinationType,
-      itemId: null,
-      sku: "פריט חופשי",
-      itemDescription: lineData.description,
-      quantity: lineData.quantity,
-      uom: lineData.uom,
-      unitPrice: lineData.unitPrice,
-      currency: lineData.currency,
-      exchangeDate: lineData.exchangeDate,
-      rate: rate,
-      needByDate: defaultDate, 
-      inventoryOrg: lineData.inventoryOrg || (lineData.lineType === 'שירות' ? null : (globalOrg || "")), 
-      subInventory: lineData.subInventory || "", 
-      buyer: lineData.buyer || "",
-      requester: lineData.requester || currentUser.id,
-      serviceApprover: lineData.serviceApprover || "",
-      qualityRequirement: "לא נדרשת ביקורת",
-      justification: "",
-      buyerNotes: "",
-      distributions: [
-        {
-          id: Date.now() + 1, 
-          quantity: lineData.quantity, 
-          percentage: 100, 
-          currency: lineData.currency, 
-          exchangeDate: lineData.exchangeDate, 
-          rate: rate, 
-          functionalAmount: lineData.unitPrice * lineData.quantity * rate,
-          projectId: globalProject, 
-          taskId: globalTask, 
-          expenditureTypeId: lineData.destinationType === 'Inventory' ? '' : globalExpType, 
-          expenditureOrgId: lineData.destinationType === 'Inventory' ? '' : globalExpOrg 
-        }
-      ]
-    };
-    
-    updateCartAndSave(prev => [...prev, newLine]);
-    showToast('פריט חופשי נוסף לסל בהצלחה!');
-  };
-
-  const handleCheckoutSubmit = (headerData, finalLines, emptyCart, routingSteps = [], status = 'Draft') => {
-    setRequisitions(prev => {
-      const nextId = prev.length > 0 ? Math.max(...prev.map(r => r.id)) + 1 : 1;
-      const reqNum = 180000 + (nextId - 1); 
-      const now = new Date().toISOString();
-
-      const formattedLines = finalLines.map((line, lIndex) => {
-        const lineId = nextId * 1000 + (lIndex + 1);
-        return {
-          id: lineId,
-          requisitionId: nextId,
-          lineNumber: lIndex + 1,
-          lineType: line.lineType,
-          destinationType: line.destinationType,
-          itemId: line.itemId ? Number(line.itemId) : null,
-          itemDescription: line.itemDescription,
-          quantity: Number(line.quantity),
-          uom: line.uom,
-          unitPrice: Number(line.unitPrice),
-          currency: line.currency,
-          exchangeDate: line.exchangeDate,
-          rate: Number(line.rate),
-          needByDate: line.needByDate,
-          inventoryOrg: line.inventoryOrg ? Number(line.inventoryOrg) : null,
-          subInventory: line.subInventory || "", 
-          buyer: line.buyer, 
-          requester: line.requester ? Number(line.requester) : null,
-          serviceApprover: line.serviceApprover ? Number(line.serviceApprover) : null,
-          supplier: line.supplier ? Number(line.supplier) : null,
-          qualityRequirement: line.qualityRequirement,
-          buyerNotes: line.buyerNotes,
-          justification: line.justification,
-          distributions: line.distributions.map((dist, dIndex) => ({
-            id: lineId * 100 + (dIndex + 1),
-            requisitionLineId: lineId,
-            quantity: Number(dist.quantity),
-            percentage: Number(dist.percentage),
-            projectId: dist.projectId ? Number(dist.projectId) : null,
-            taskId: dist.taskId ? Number(dist.taskId) : null,
-            expenditureTypeId: dist.expenditureTypeId ? Number(dist.expenditureTypeId) : null,
-            expenditureOrgId: dist.expenditureOrgId ? Number(dist.expenditureOrgId) : null,
-            functionalAmount: Number(dist.functionalAmount)
-          }))
-        };
-      });
-
-      const newRequisition = {
-        id: nextId,
-        requisitionNumber: String(reqNum),
-        description: headerData.description || '',
-        creationDate: now,
-        lastUpdateDate: now,
-        creatorId: currentUser.id,
-        total: formattedLines.reduce((sum, item) => sum + (item.unitPrice * item.quantity * item.rate), 0),
-        status: status, 
-        routingSteps: routingSteps,
-        lines: formattedLines
-      };
-
-      const updatedList = [newRequisition, ...prev];
-      localStorage.setItem('appRequisitions', JSON.stringify(updatedList));
-      
-      setTimeout(() => {
-          if (emptyCart) {
-            updateCartAndSave([]); 
-          } else {
-            updateCartAndSave(finalLines);
-          }
-          
-          if (status === 'IN PROCESS') {
-              handleNavigate('success', newRequisition);
-          } else {
-              handleNavigate('home');
-          }
-      }, 0);
-
-      return updatedList;
-    });
+    appData.resetAppData(); // מנקה את הנתונים ב-Hook
   };
 
   if (!currentUser) {
@@ -439,16 +72,16 @@ function App() {
         isDarkMode={isDarkMode} 
         onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} 
         onNavigate={handleNavigate}
-        cartLines={cartLines} 
-        onUpdateQty={updateLineQty}
+        cartLines={appData.cartLines} 
+        onUpdateQty={appData.updateLineQty}
         
-        globalOrg={globalOrg} setGlobalOrg={handleSetGlobalOrg} 
-        globalDestType={globalDestType} setGlobalDestType={handleSetGlobalDestType} 
-        globalSubInv={globalSubInv} setGlobalSubInv={handleSetGlobalSubInv} 
-        globalProject={globalProject} setGlobalProject={handleSetGlobalProject}
-        globalTask={globalTask} setGlobalTask={handleSetGlobalTask}
-        globalExpType={globalExpType} setGlobalExpType={handleSetGlobalExpType}
-        globalExpOrg={globalExpOrg} setGlobalExpOrg={handleSetGlobalExpOrg}
+        globalOrg={appData.globalOrg} setGlobalOrg={appData.handleSetGlobalOrg} 
+        globalDestType={appData.globalDestType} setGlobalDestType={appData.handleSetGlobalDestType} 
+        globalSubInv={appData.globalSubInv} setGlobalSubInv={appData.handleSetGlobalSubInv} 
+        globalProject={appData.globalProject} setGlobalProject={appData.handleSetGlobalProject}
+        globalTask={appData.globalTask} setGlobalTask={appData.handleSetGlobalTask}
+        globalExpType={appData.globalExpType} setGlobalExpType={appData.handleSetGlobalExpType}
+        globalExpOrg={appData.globalExpOrg} setGlobalExpOrg={appData.handleSetGlobalExpOrg}
         
         onOpenNonCatalog={() => setIsNonCatalogOpen(true)}
         showToast={showToast}
@@ -486,68 +119,70 @@ function App() {
         {currentView === 'user-guide' && <UserGuide onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'faq' && <FAQ onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'proc-docs' && <ProcDocs onBackToHome={() => handleNavigate('home')} />}
-        {currentView === 'preferred-approvers' && <PreferredApprovers onBackToHome={() => handleNavigate('home')} />}
-        {currentView === 'favorite-items' && <FavoriteItems onBackToHome={() => handleNavigate('home')} />}
+        
+        {currentView === 'preferred-approvers' && (
+          <PreferredApprovers currentUser={currentUser} showToast={showToast} onBackToHome={() => handleNavigate('home')} />
+        )}
+        
+        {currentView === 'favorite-items' && (
+          <FavoriteItems 
+            favoriteItems={appData.favoriteItems}
+            favoriteNonCatalogItems={appData.favoriteNonCatalogItems}
+            toggleFavorite={appData.toggleFavorite}
+            onRemoveNonCatalogFavorite={appData.handleRemoveNonCatalogFavorite}
+            onAddToCart={appData.handleAddToCartItem}
+            onAddNonCatalogToCart={appData.addNonCatalogLine}
+            onQuickOrder={appData.handleQuickOrderItem}
+            onQuickOrderNonCatalog={appData.handleQuickOrderNonCatalog}
+            onNavigate={handleNavigate}
+            onBackToHome={() => handleNavigate('home')} 
+          />
+        )}
         
         {currentView === 'search-results' && (
           <SearchResults 
             query={viewPayload} 
-            onBackToHome={() => handleNavigate('home')} 
+            favoriteItems={appData.favoriteItems}
+            toggleFavorite={appData.toggleFavorite}
+            onAddToCart={appData.handleAddToCartItem}
+            onQuickOrder={appData.handleQuickOrderItem}
             onNavigate={handleNavigate}
-            onAddToCart={(itemId, quantity) => {
-              const existingLine = cartLines.find(line => String(line.itemId) === String(itemId));
-              if (existingLine) {
-                updateLineQty(existingLine.id, existingLine.quantity + quantity);
-                showToast('כמות הפריט עודכנה בסל בהצלחה!');
-              } else {
-                addNewLine(itemId, quantity); 
-              }
-            }}
-            onQuickOrder={(itemId, quantity) => {
-              const existingLine = cartLines.find(line => String(line.itemId) === String(itemId));
-              if (existingLine) {
-                updateLineQty(existingLine.id, existingLine.quantity + quantity);
-              } else {
-                addNewLine(itemId, quantity);
-              }
-              handleNavigate('checkout');
-            }}
-            favoriteItems={[]}
+            onBackToHome={() => handleNavigate('home')} 
           />
         )}
         
         {currentView === 'item-details' && (
           <ItemDetails 
             itemId={viewPayload} 
-            onBack={() => handleNavigate('home')} 
-            cartLines={cartLines}
-            onUpdateQty={updateLineQty}
-            onAddNewLine={addNewLine}
+            favoriteItems={appData.favoriteItems}
+            toggleFavorite={appData.toggleFavorite}
+            cartLines={appData.cartLines}
+            onUpdateQty={appData.updateLineQty}
+            onAddNewLine={appData.addNewLine}
             onNavigate={handleNavigate}
+            onBack={() => handleNavigate('home')} 
           />
         )}
 
         {currentView === 'checkout' && (
           <Checkout 
-            cartLines={cartLines}
+            cartLines={appData.cartLines}
             currentUser={currentUser}
-            
-            globalOrg={globalOrg}
-            globalDestType={globalDestType} 
-            globalSubInv={globalSubInv} 
-            globalProject={globalProject}
-            globalTask={globalTask}
-            globalExpType={globalExpType}
-            globalExpOrg={globalExpOrg}
-            
+            globalOrg={appData.globalOrg}
+            globalDestType={appData.globalDestType} 
+            globalSubInv={appData.globalSubInv} 
+            globalProject={appData.globalProject}
+            globalTask={appData.globalTask}
+            globalExpType={appData.globalExpType}
+            globalExpOrg={appData.globalExpOrg}
             onBack={() => handleNavigate('home')}
-            onSubmit={handleCheckoutSubmit}
-            onRemoveFromCart={(id) => updateLineQty(id, 0)} 
-            nextRequisitionNumber={String(180000 + (requisitions.length > 0 ? Math.max(...requisitions.map(r => r.id)) : 0))}
+            onSubmit={appData.handleCheckoutSubmit}
+            onRemoveFromCart={(id) => appData.updateLineQty(id, 0)} 
+            nextRequisitionNumber={String(180000 + (appData.requisitions.length > 0 ? Math.max(...appData.requisitions.map(r => r.id)) : 0))}
             onAddLineToCart={(newLineData) => {
               const newLine = {
                 id: Date.now(),
-                lineNumber: cartLines.length + 1,
+                lineNumber: appData.cartLines.length + 1,
                 lineType: newLineData.lineType,
                 destinationType: newLineData.destinationType,
                 itemId: newLineData.itemId,
@@ -575,7 +210,7 @@ function App() {
                   functionalAmount: (newLineData.unitPrice || 0) * d.quantity * (newLineData.rate || 1)
                 }))
               };
-              updateCartAndSave(prev => [...prev, newLine]);
+              appData.updateCartAndSave(prev => [...prev, newLine]);
               showToast('השורה נוספה לסל בהצלחה!');
             }}
           />
@@ -586,21 +221,15 @@ function App() {
         isOpen={isNonCatalogOpen}
         onClose={() => setIsNonCatalogOpen(false)}
         currentUser={currentUser}
-        
-        globalDestType={globalDestType} 
-        globalSubInv={globalSubInv}
-        globalProject={globalProject}
-        globalTask={globalTask}
-        globalExpType={globalExpType}
-        globalExpOrg={globalExpOrg}
-        
-        onAddToCart={(data) => {
-          addNonCatalogLine(data);
-        }}
-        onQuickOrder={(data) => {
-          addNonCatalogLine(data);
-          handleNavigate('checkout');
-        }}
+        globalDestType={appData.globalDestType} 
+        globalSubInv={appData.globalSubInv}
+        globalProject={appData.globalProject}
+        globalTask={appData.globalTask}
+        globalExpType={appData.globalExpType}
+        globalExpOrg={appData.globalExpOrg}
+        onAddToCart={appData.addNonCatalogLine}
+        onQuickOrder={appData.handleQuickOrderNonCatalog}
+        onSaveFavorite={appData.handleSaveNonCatalogFavorite}
       />
 
       {/* --- באנר ה-Toast הגלובלי --- */}
@@ -618,7 +247,7 @@ function App() {
       <WelcomeModal
         isOpen={showOrgPrompt}
         onSelectOrg={(org) => {
-          handleSetGlobalOrg(org.id);
+          appData.handleSetGlobalOrg(org.id);
           setShowOrgPrompt(false);
           showToast(`ארגון ${org.name} הוגדר כברירת מחדל בהצלחה!`);
         }}

@@ -31,9 +31,9 @@ export default function CatalogItemCard({
         <button 
           onClick={(e) => {
             e.stopPropagation();
-            onToggleFavorite && onToggleFavorite(item.id);
+            if (onToggleFavorite) onToggleFavorite(item.id);
           }}
-          className={`absolute top-3 left-3 p-2 rounded-full z-10 backdrop-blur-md shadow-sm transition-all cursor-pointer hover:scale-110 ${
+          className={`absolute top-3 left-3 p-2 rounded-full z-10 backdrop-blur-md shadow-sm transition-all duration-300 cursor-pointer hover:scale-110 active:scale-95 ${
             isFavorite 
               ? 'bg-rose-100/90 text-rose-600 border border-rose-200 dark:bg-rose-900/50 dark:border-rose-800' 
               : 'bg-white/80 text-gray-400 border border-gray-200 hover:text-rose-500 hover:bg-rose-50 dark:bg-gray-800/80 dark:border-gray-600 dark:hover:bg-gray-700'
@@ -118,7 +118,7 @@ export default function CatalogItemCard({
             <button 
               onClick={() => handleQtyChange(quantity - 1)}
               disabled={quantity <= 1}
-              className="w-7 h-7 flex items-center justify-center bg-white dark:bg-gray-800 rounded-lg shadow-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 disabled:opacity-50 transition-colors"
+              className="w-7 h-7 flex items-center justify-center bg-white dark:bg-gray-800 rounded-lg shadow-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 disabled:opacity-50 transition-colors cursor-pointer"
             >
               -
             </button>
@@ -131,7 +131,7 @@ export default function CatalogItemCard({
             />
             <button 
               onClick={() => handleQtyChange(quantity + 1)}
-              className="w-7 h-7 flex items-center justify-center bg-white dark:bg-gray-800 rounded-lg shadow-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 transition-colors"
+              className="w-7 h-7 flex items-center justify-center bg-white dark:bg-gray-800 rounded-lg shadow-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 transition-colors cursor-pointer"
             >
               +
             </button>
