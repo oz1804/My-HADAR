@@ -115,7 +115,19 @@ function App() {
           </div>
         )}
 
-        {currentView === 'requisitions' && <MyRequisitions onBackToHome={() => handleNavigate('home')} />}
+        {currentView === 'requisitions' && (
+          <MyRequisitions
+            requisitions={appData.myRequisitions}
+            cartLines={appData.cartLines}
+            editingRequisitionId={appData.editingRequisitionId}
+            onStartEdit={appData.startEditRequisition}
+            onCopy={appData.copyRequisitionToCart}
+            onDelete={appData.deleteRequisition}
+            onCancel={appData.cancelRequisition}
+            onNavigate={handleNavigate}
+            onBackToHome={() => handleNavigate('home')}
+          />
+        )}
         {currentView === 'user-guide' && <UserGuide onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'faq' && <FAQ onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'proc-docs' && <ProcDocs onBackToHome={() => handleNavigate('home')} />}
@@ -178,41 +190,8 @@ function App() {
             onBack={() => handleNavigate('home')}
             onSubmit={appData.handleCheckoutSubmit}
             onRemoveFromCart={(id) => appData.updateLineQty(id, 0)} 
-            nextRequisitionNumber={String(180000 + (appData.requisitions.length > 0 ? Math.max(...appData.requisitions.map(r => r.id)) : 0))}
-            onAddLineToCart={(newLineData) => {
-              const newLine = {
-                id: Date.now(),
-                lineNumber: appData.cartLines.length + 1,
-                lineType: newLineData.lineType,
-                destinationType: newLineData.destinationType,
-                itemId: newLineData.itemId,
-                sku: newLineData.sku,
-                itemDescription: newLineData.itemDescription,
-                quantity: newLineData.quantity,
-                uom: newLineData.uom,
-                unitPrice: newLineData.unitPrice,
-                currency: newLineData.currency,
-                exchangeDate: newLineData.exchangeDate,
-                rate: newLineData.rate || 1,
-                needByDate: newLineData.needByDate,
-                inventoryOrg: newLineData.inventoryOrg,
-                subInventory: newLineData.subInventory || "", 
-                buyer: newLineData.buyer,
-                requester: newLineData.requester,
-                serviceApprover: newLineData.serviceApprover,
-                supplier: newLineData.supplier,
-                qualityRequirement: newLineData.qualityRequirement,
-                justification: newLineData.justification,
-                buyerNotes: newLineData.buyerNotes,
-                distributions: newLineData.distributions.map(d => ({
-                  ...d,
-                  id: d.id || Date.now() + Math.random(),
-                  functionalAmount: (newLineData.unitPrice || 0) * d.quantity * (newLineData.rate || 1)
-                }))
-              };
-              appData.updateCartAndSave(prev => [...prev, newLine]);
-              showToast('השורה נוספה לסל בהצלחה!');
-            }}
+            nextRequisitionNumber={appData.nextRequisitionNumber}
+            onAddLineToCart={appData.addCheckoutLine}
           />
         )}
       </main>

@@ -5,7 +5,8 @@ export default function CheckoutLineDistributions({
   line, 
   onAddDist, 
   onDistFieldChange, 
-  onRemoveDist 
+  onRemoveDist,
+  showBudgetErrors = false
 }) {
   const distributions = line.distributions || [];
   
@@ -52,6 +53,7 @@ export default function CheckoutLineDistributions({
             onDistFieldChange={onDistFieldChange}
             onRemoveDist={onRemoveDist}
             canRemove={distributions.length > 1}
+            showBudgetErrors={showBudgetErrors}
           />
         ))}
       </div>

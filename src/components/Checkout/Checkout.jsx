@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import CheckoutHeader from './CheckoutHeader';
 import CheckoutLines from './CheckoutLines';
 import useCheckout from './UseCheckout'; 
 import ApprovalRoutingDrawer from './ApprovalRoutingDrawer';
+import { validateBudgetForApproval } from '../../utils/budgetValidation';
 
 export default function Checkout({ 
   cartLines = [], 
@@ -23,6 +24,8 @@ export default function Checkout({
   
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isApprovalDrawerOpen, setIsApprovalDrawerOpen] = useState(false); 
+  const [showBudgetErrors, setShowBudgetErrors] = useState(false); // מוצג רק אחרי ניסיון העברה לסבב
+  const [budgetFocusKey, setBudgetFocusKey] = useState(0);         // מסמן לרשימת השורות לקפוץ לשגיאה הראשונה
 
   const {
     headerOrg, 
@@ -88,7 +91,25 @@ export default function Checkout({
     setIsSaveModalOpen(false);
   };
 
+  // בדיקת סעיפים תקציביים - מתעדכנת בזמן אמת בזמן שהמשתמש מתקן
+  const budgetErrors = useMemo(() => validateBudgetForApproval(lines), [lines]);
+
+  // לחיצה על "העבר לסבב אישורים": אם חסר סעיף תקציבי - מציגים את השגיאות במקום לפתוח את המגירה
+  const handleApprovalRoutingClick = () => {
+    if (budgetErrors.length > 0) {
+      setShowBudgetErrors(true);
+      setBudgetFocusKey(k => k + 1);
+      return;
+    }
+    setIsApprovalDrawerOpen(true);
+  };
+
   const handleApprovalSubmit = (routingSteps) => {
+    if (validateBudgetForApproval(lines).length > 0) {
+      setIsApprovalDrawerOpen(false);
+      handleApprovalRoutingClick();
+      return;
+    }
     onSubmit(buildHeaderData(), lines, true, routingSteps, 'IN PROCESS');
   };
 
@@ -131,7 +152,7 @@ export default function Checkout({
         hasExpenseLines={hasExpenseLines}
         isBudgetMixed={isBudgetMixed}
         onSaveRequestClick={() => setIsSaveModalOpen(true)}
-        onApprovalRoutingClick={() => setIsApprovalDrawerOpen(true)} 
+        onApprovalRoutingClick={handleApprovalRoutingClick} 
         nextRequisitionNumber={nextRequisitionNumber} 
       />
       
@@ -148,6 +169,9 @@ export default function Checkout({
           onDistFieldChange={handleDistFieldChange}
           onRemoveDist={handleRemoveDist}
           onApplyBulkEdit={handleApplyBulkEdit}
+          budgetErrors={budgetErrors}
+          showBudgetErrors={showBudgetErrors}
+          budgetFocusKey={budgetFocusKey}
           
           // ניתוב מחדש לפונקציה המשולבת שיצרנו!
           onAddNewLine={onQuickLineAdded}

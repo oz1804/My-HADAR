@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import CheckoutLineRow from './CheckoutLineRow';
 import DocumentsModal from './DocumentsModal'; 
 import BulkEditForm from './BulkEditForm';
 import QuickAddForm from './QuickAddForm';
+import { BUDGET_FIELD_LABELS } from '../../utils/budgetValidation';
 
 const PAGE_SIZE = 10;
 
@@ -35,7 +36,10 @@ export default function CheckoutLines({
   globalProject,   // <--- קבלת הפרויקט מ-Checkout
   globalTask,      // <--- קבלת המשימה מ-Checkout
   globalExpType,   // <--- קבלת סוג ההוצאה מ-Checkout
-  globalExpOrg     // <--- קבלת היחידה המממנת מ-Checkout
+  globalExpOrg,    // <--- קבלת היחידה המממנת מ-Checkout
+  budgetErrors = [],        // שורות עם סעיף תקציבי חסר (מ-validateBudgetForApproval)
+  showBudgetErrors = false, // האם להציג את השגיאות (רק אחרי ניסיון העברה לסבב)
+  budgetFocusKey = 0        // משתנה בכל ניסיון העברה -> קפיצה לשגיאה הראשונה
 }) {
   const [openDocsLineId, setOpenDocsLineId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -58,6 +62,30 @@ export default function CheckoutLines({
     }
     setPrevLinesLength(lines.length);
   }, [lines.length, prevLinesLength]);
+
+  // --- סעיפים תקציביים חסרים ---
+  const budgetErrorsRef = useRef(null);
+  const budgetErrorsByLine = Object.fromEntries(budgetErrors.map(e => [e.lineId, e]));
+  const hasVisibleBudgetErrors = showBudgetErrors && budgetErrors.length > 0;
+
+  // מעבר לעמוד של שורה מסוימת וגלילה אליה
+  const jumpToLine = (lineId) => {
+    const pos = lines.filter(Boolean).findIndex(l => l.id === lineId);
+    if (pos < 0) return;
+    setCurrentPage(Math.floor(pos / PAGE_SIZE) + 1);
+    setTimeout(() => {
+      document.getElementById(`checkout-line-${lineId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  // בכל ניסיון העברה לסבב עם שגיאות: עוברים לעמוד של השגיאה הראשונה ומציגים את ההודעה
+  useEffect(() => {
+    if (!budgetFocusKey || budgetErrors.length === 0) return;
+    const pos = lines.filter(Boolean).findIndex(l => l.id === budgetErrors[0].lineId);
+    if (pos >= 0) setCurrentPage(Math.floor(pos / PAGE_SIZE) + 1);
+    setTimeout(() => budgetErrorsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [budgetFocusKey]);
 
   const pagedLines = lines.filter(Boolean).slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
@@ -179,6 +207,42 @@ export default function CheckoutLines({
         </div>
       )}
 
+      {/* --- הודעת סעיפים תקציביים חסרים --- */}
+      {hasVisibleBudgetErrors && (
+        <div ref={budgetErrorsRef} role="alert" className="p-4 sm:p-5 rounded-2xl border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-900/20 animate-fade-in">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h4 className="font-black text-rose-800 dark:text-rose-200">לא ניתן להעביר לסבב אישורים</h4>
+              <p className="text-sm text-rose-700 dark:text-rose-300 mt-0.5">
+                {budgetErrors.length === 1 ? 'בשורה אחת חסר סעיף תקציבי.' : `ב-${budgetErrors.length} שורות חסר סעיף תקציבי.`} יש להשלים את השדות המסומנים בחלוקה התקציבית (או לעדכן אותם לכל השורות דרך התקציב בכותרת הסל).
+              </p>
+              <ul className="mt-3 space-y-1.5">
+                {budgetErrors.slice(0, 6).map(err => (
+                  <li key={err.lineId}>
+                    <button
+                      onClick={() => jumpToLine(err.lineId)}
+                      className="w-full text-start flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-2 rounded-xl bg-white/70 dark:bg-gray-800/60 hover:bg-white dark:hover:bg-gray-800 border border-rose-100 dark:border-rose-900/40 transition-colors cursor-pointer text-sm"
+                    >
+                      <span className="font-mono font-bold text-rose-600 dark:text-rose-400">#{err.lineNumber}</span>
+                      <span className="font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[16rem]">{err.itemDescription}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {err.dists.map(d => `${err.dists.length > 1 || d.index > 0 ? `חלוקה ${d.index + 1}: ` : ''}חסר ${d.missing.map(f => BUDGET_FIELD_LABELS[f]).join(', ')}`).join(' · ')}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {budgetErrors.length > 6 && (
+                <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-2">ועוד {budgetErrors.length - 6} שורות נוספות המסומנות באדום.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- רינדור השורות --- */}
       {pagedLines.map((line, idx) => (
         <CheckoutLineRow
@@ -195,6 +259,8 @@ export default function CheckoutLines({
           onAddDist={onAddDist}
           onDistFieldChange={onDistFieldChange}
           onRemoveDist={onRemoveDist}
+          budgetError={showBudgetErrors ? budgetErrorsByLine[line.id] : null}
+          showBudgetErrors={showBudgetErrors}
         />
       ))}
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import data from '../../data/data.json';
+import { getMissingDistFields } from '../../utils/budgetValidation';
 
 export default function CheckoutLineDistributionRow({ 
   dist, 
@@ -7,9 +8,20 @@ export default function CheckoutLineDistributionRow({
   index, 
   onDistFieldChange, 
   onRemoveDist, 
-  canRemove 
+  canRemove,
+  showBudgetErrors = false
 }) {
   const isInventory = line.destinationType === 'Inventory';
+
+  // --- סימון שדות סעיף תקציבי חסרים (רק אחרי ניסיון העברה לסבב) ---
+  const missingFields = showBudgetErrors ? getMissingDistFields(line, dist) : [];
+  const hasMissing = missingFields.length > 0;
+  const selectClass = (field) => `w-full p-1 border rounded text-xs outline-none focus:border-blue-500 ${
+    missingFields.includes(field)
+      ? 'border-rose-400 dark:border-rose-600 bg-rose-50 dark:bg-rose-900/20 ring-1 ring-rose-200 dark:ring-rose-900/40'
+      : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
+  }`;
+  const requiredMark = <span className="text-rose-500 ms-0.5">*</span>;
 
   // --- לוגיקת סינון תוקף (Dates) ---
   const today = new Date().toISOString().split('T')[0];
@@ -36,7 +48,7 @@ export default function CheckoutLineDistributionRow({
   });
 
   return (
-    <div className="flex flex-col gap-3 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl relative hover:border-blue-300 transition-colors">
+    <div className={`flex flex-col gap-3 p-3 bg-white dark:bg-gray-800 border rounded-xl relative transition-colors ${hasMissing ? 'border-rose-300 dark:border-rose-700/70' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'}`}>
       
       <div className="flex flex-wrap lg:flex-nowrap items-center gap-3 w-full">
         <div className="w-6 text-center font-bold text-gray-400 text-xs shrink-0">
@@ -90,11 +102,12 @@ export default function CheckoutLineDistributionRow({
 
       <div className={`grid grid-cols-2 ${isInventory ? 'lg:grid-cols-2' : 'lg:grid-cols-4'} gap-2 w-full lg:pl-12 pt-2 border-t border-gray-100 dark:border-gray-700/50 mt-1`}>
         <div className="flex flex-col">
-          <label className="text-[10px] text-gray-500 font-bold mb-0.5">פרויקט</label>
+          <label className="text-[10px] text-gray-500 font-bold mb-0.5">פרויקט{requiredMark}</label>
           <select 
             value={dist.projectId || ''}
             onChange={(e) => onDistFieldChange(line.id, dist.id, 'projectId', e.target.value)}
-            className="w-full p-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs outline-none focus:border-blue-500"
+            className={selectClass('projectId')}
+            aria-invalid={missingFields.includes('projectId')}
           >
             <option value="">בחר פרויקט...</option>
             {availableProjects?.map(p => <option key={p.id} value={p.id}>{p.projectCode}</option>)}
@@ -102,11 +115,12 @@ export default function CheckoutLineDistributionRow({
         </div>
 
         <div className="flex flex-col">
-          <label className="text-[10px] text-gray-500 font-bold mb-0.5">משימה</label>
+          <label className="text-[10px] text-gray-500 font-bold mb-0.5">משימה{requiredMark}</label>
           <select 
             value={dist.taskId || ''}
             onChange={(e) => onDistFieldChange(line.id, dist.id, 'taskId', e.target.value)}
-            className="w-full p-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs outline-none focus:border-blue-500"
+            className={selectClass('taskId')}
+            aria-invalid={missingFields.includes('taskId')}
           >
             <option value="">בחר משימה...</option>
             {data.tasks
@@ -118,11 +132,12 @@ export default function CheckoutLineDistributionRow({
         {!isInventory && (
           <>
             <div className="flex flex-col">
-              <label className="text-[10px] text-gray-500 font-bold mb-0.5">סוג הוצאה</label>
+              <label className="text-[10px] text-gray-500 font-bold mb-0.5">סוג הוצאה{requiredMark}</label>
               <select 
                 value={dist.expenditureTypeId || ''}
                 onChange={(e) => onDistFieldChange(line.id, dist.id, 'expenditureTypeId', e.target.value)}
-                className="w-full p-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs outline-none focus:border-blue-500"
+                className={selectClass('expenditureTypeId')}
+                aria-invalid={missingFields.includes('expenditureTypeId')}
               >
                 <option value="">בחר סוג הוצאה...</option>
                 {data.expenditureTypes
@@ -139,11 +154,12 @@ export default function CheckoutLineDistributionRow({
             </div>
 
             <div className="flex flex-col">
-              <label className="text-[10px] text-gray-500 font-bold mb-0.5">יחידה מממנת</label>
+              <label className="text-[10px] text-gray-500 font-bold mb-0.5">יחידה מממנת{requiredMark}</label>
               <select 
                 value={dist.expenditureOrgId || ''}
                 onChange={(e) => onDistFieldChange(line.id, dist.id, 'expenditureOrgId', e.target.value)}
-                className="w-full p-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs outline-none focus:border-blue-500"
+                className={selectClass('expenditureOrgId')}
+                aria-invalid={missingFields.includes('expenditureOrgId')}
               >
                 <option value="">בחר יחידה מממנת...</option>
                 {data.expenditureOrganizations?.filter(isItemActive).map(org => (

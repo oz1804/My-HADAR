@@ -14,14 +14,25 @@ export default function CheckoutLineRow({
   onOpenDocs,
   onAddDist,
   onDistFieldChange,
-  onRemoveDist
+  onRemoveDist,
+  budgetError = null,       // שגיאת סעיף תקציבי לשורה זו (רק אחרי ניסיון העברה לסבב)
+  showBudgetErrors = false
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [wasClosedByUser, setWasClosedByUser] = useState(false);
   const [isPriceEditable] = useState(!line?.unitPrice || line?.unitPrice === 0);
 
   // --- חומת מגן (Safeguard): מונע קריסה מוחלטת במידה ויש שורה ריקה ---
   // חייב להיות אחרי כל ה-hooks!
   if (!line) return null;
+
+  // שורה עם סעיף תקציבי חסר נפתחת אוטומטית כדי שהשדות המסומנים יהיו גלויים
+  const hasBudgetError = !!budgetError;
+  const isOpen = isExpanded || (hasBudgetError && !wasClosedByUser);
+  const toggleExpanded = () => {
+    if (isOpen) { setIsExpanded(false); setWasClosedByUser(true); }
+    else { setIsExpanded(true); setWasClosedByUser(false); }
+  };
 
   const isForeignCurrency = line.currency && line.currency !== 'ILS';
   const currencySymbol = line.currency === 'USD' ? '$' : line.currency === 'EUR' ? '€' : '₪';
@@ -33,10 +44,12 @@ export default function CheckoutLineRow({
   const stealthInputClass = "bg-transparent border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:bg-white dark:focus:bg-gray-800 focus:border-blue-500 rounded-lg text-sm transition-all outline-none cursor-pointer focus:cursor-text";
 
   return (
-    <div className={`bg-white dark:bg-gray-800 rounded-xl transition-all duration-200 ${
+    <div id={`checkout-line-${line.id}`} className={`bg-white dark:bg-gray-800 rounded-xl transition-all duration-200 scroll-mt-28 ${
       isSelected 
         ? 'border-2 border-blue-500 shadow-md ring-4 ring-blue-50 dark:ring-blue-900/20' 
-        : 'border border-gray-200 dark:border-gray-700 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md'
+        : hasBudgetError
+          ? 'border-2 border-rose-300 dark:border-rose-700/70 shadow-sm'
+          : 'border border-gray-200 dark:border-gray-700 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md'
     }`}>
       
       <div className="p-4 flex flex-col lg:flex-row items-start lg:items-center gap-4 lg:gap-6">
@@ -54,6 +67,9 @@ export default function CheckoutLineRow({
           <div className="flex flex-col">
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 font-mono mb-0.5">
               <span>מק"ט: {line.sku || 'ללא מק"ט'}</span>
+              {hasBudgetError && (
+                <span className="font-sans text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">חסר סעיף תקציבי</span>
+              )}
               <span className="w-1 h-1 bg-gray-300 dark:bg-gray-600 rounded-full"></span>
               <span className="flex items-center gap-1" title="קניין מטפל">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-indigo-400">
@@ -163,15 +179,15 @@ export default function CheckoutLineRow({
           </button>
 
           <button 
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={toggleExpanded}
             className={`flex items-center gap-1 px-3 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
-              isExpanded 
+              isOpen 
                 ? 'bg-gray-800 text-white dark:bg-white dark:text-gray-900' 
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
             }`}
           >
-            {isExpanded ? 'סגור הגדרות' : 'הגדרות נוספות'}
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+            {isOpen ? 'סגור הגדרות' : 'הגדרות נוספות'}
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
             </svg>
           </button>
@@ -179,7 +195,7 @@ export default function CheckoutLineRow({
 
       </div>
 
-      {isExpanded && (
+      {isOpen && (
         <div className="px-4 pb-4 animate-fade-in">
           <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
             <h4 className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">לוגיסטיקה ורכש</h4>
@@ -407,6 +423,7 @@ export default function CheckoutLineRow({
               onAddDist={onAddDist}
               onDistFieldChange={onDistFieldChange}
               onRemoveDist={onRemoveDist}
+              showBudgetErrors={showBudgetErrors}
             />
 
           </div>
