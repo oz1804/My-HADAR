@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
-import { canDoAction } from '../hooks/useAppData';
+import { useEffect, useMemo, useState } from 'react';
+import { canDoAction, canCancelRequisition, canCancelRequisitionLine, activeLines } from '../hooks/useAppData';
 import { STATUS_META, STATUS_ORDER, ACTION_META, formatMoney, formatDate } from './Requisitions/requisitionUi';
 import { StatusBadge, Icon } from './Requisitions/RequisitionUiParts';
 import RequisitionDetails from './Requisitions/RequisitionDetails';
 import RequisitionActionModals from './Requisitions/RequisitionActionModals';
+import { getDocsForRequisition } from '../utils/purchaseOrders';
+import { PoDocChip } from './PurchaseOrders/PoLinks';
 
 // סדר כפתורי הפעולה בשורה של הטבלה
 const ROW_ACTIONS = ['edit', 'copy', 'cancel', 'delete'];
@@ -21,6 +23,26 @@ function RowActionButton({ action, onClick, showLabel = false }) {
       <Icon name={meta.icon} className="w-[18px] h-[18px]" />
       {showLabel && meta.label}
     </button>
+  );
+}
+
+// ההזמנה הראשונה שקושרה לדרישה (+ מונה אם יש עוד)
+function FirstPoDoc({ req, onOpen }) {
+  const docs = getDocsForRequisition(req);
+  if (docs.length === 0) return <span className="text-gray-300 dark:text-gray-600">—</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <PoDocChip doc={docs[0]} onOpen={onOpen} />
+      {docs.length > 1 && (
+        <span
+          dir="ltr"
+          className="text-[11px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-md whitespace-nowrap"
+          title={`הזמנות נוספות: ${docs.slice(1).map(d => d.number).join(', ')}`}
+        >
+          +{docs.length - 1}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -42,12 +64,19 @@ export default function MyRequisitions({
   onCopy,
   onDelete,
   onCancel,
+  onCancelLine,
   onNavigate,
-  onBackToHome
+  onBackToHome,
+  selectedId = null,          // הדרישה הפתוחה מגיעה מהניווט של האפליקציה (viewPayload).
+  onSelect,                   // לחיצה על "הדרישות שלי" ב-Navbar מנווטת בלי מזהה -> חזרה לרשימה
+  onOpenDoc                   // פתיחת מסך הזמנה: (doc, fromRequisitionId|null, focusPoLineId?)
 }) {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState(null);
+  const setSelectedId = (id) => onSelect(id);
+
+  // מעבר בין הרשימה למסך פרטים - גלילה לראש העמוד
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [selectedId]);
   const [modal, setModal] = useState(null); // { type, requisition, isEditing }
 
   const cartCount = cartLines.length;
@@ -79,7 +108,10 @@ export default function MyRequisitions({
   // ==========================================
   // ניתוב פעולות - כולל טיפול בהתנגשות עם הסל
   // ==========================================
-  const handleAction = (action, req) => {
+  // האם הפעולה מוצגת בשורה של הרשימה (ביטול - רק לדרישה שאין לה הזמנות)
+  const isRowActionAllowed = (req, a) => (a === 'cancel' ? canCancelRequisition(req) : canDoAction(req.status, a));
+
+  const handleAction = (action, req, line = null) => {
     if (action === 'view') { setSelectedId(req.id); return; }
 
     if (action === 'edit') {
@@ -98,7 +130,10 @@ export default function MyRequisitions({
     }
 
     if (action === 'delete') { setModal({ type: 'delete', requisition: req, isEditing: req.id === editingRequisitionId && cartCount > 0 }); return; }
-    if (action === 'cancel') { setModal({ type: 'cancel', requisition: req }); }
+    if (action === 'cancel') { if (canCancelRequisition(req)) setModal({ type: 'cancel', requisition: req }); return; }
+    if (action === 'cancelLine' && canCancelRequisitionLine(req, line)) {
+      setModal({ type: 'cancelLine', requisition: req, line, isLastActiveLine: activeLines(req).length === 1 });
+    }
   };
 
   const closeModal = () => setModal(null);
@@ -117,6 +152,7 @@ export default function MyRequisitions({
         if (onDelete(id) && id === selectedId) setSelectedId(null);
       }}
       onConfirmCancel={() => { const id = modal.requisition.id; closeModal(); onCancel(id); }}
+      onConfirmCancelLine={() => { const { requisition, line } = modal; closeModal(); onCancelLine(requisition.id, line.id); }}
     />
   );
 
@@ -132,6 +168,7 @@ export default function MyRequisitions({
           onAction={handleAction}
           onBack={() => setSelectedId(null)}
           onContinueEditing={() => onNavigate('checkout')}
+          onOpenDoc={(doc, focusPoLineId) => onOpenDoc(doc, selectedReq.id, focusPoLineId)}
         />
         {modalElement}
       </>
@@ -234,6 +271,7 @@ export default function MyRequisitions({
                       <th className="text-start px-4 py-3">נוצרה</th>
                       <th className="text-start px-4 py-3">שורות</th>
                       <th className="text-end px-4 py-3">סה"כ</th>
+                      <th className="text-start px-4 py-3">הזמנה</th>
                       <th className="text-start px-4 py-3">סטטוס</th>
                       <th className="text-end px-4 py-3"><span className="sr-only">פעולות</span></th>
                     </tr>
@@ -259,10 +297,11 @@ export default function MyRequisitions({
                           <td className="px-4 py-3.5 text-gray-600 dark:text-gray-400 whitespace-nowrap">{formatDate(req.creationDate)}</td>
                           <td className="px-4 py-3.5 text-gray-600 dark:text-gray-400">{(req.lines || []).length}</td>
                           <td className="px-4 py-3.5 text-end font-bold text-gray-900 dark:text-white whitespace-nowrap">{formatMoney(req.total)}</td>
+                          <td className="px-4 py-3.5"><FirstPoDoc req={req} onOpen={(doc) => onOpenDoc(doc, null)} /></td>
                           <td className="px-4 py-3.5"><StatusBadge status={req.status} /></td>
                           <td className="px-3 py-2">
                             <div className="flex items-center justify-end gap-0.5">
-                              {ROW_ACTIONS.filter(a => canDoAction(req.status, a)).map(a => (
+                              {ROW_ACTIONS.filter(a => isRowActionAllowed(req, a)).map(a => (
                                 <RowActionButton key={a} action={a} onClick={() => handleAction(a, req)} />
                               ))}
                               <Icon name="chevronLeft" className="w-4 h-4 text-gray-300 dark:text-gray-600 ms-1 group-hover:text-blue-500 transition-colors" strokeWidth={2.5} />
@@ -297,12 +336,13 @@ export default function MyRequisitions({
                       <div className="flex justify-between items-end mt-3">
                         <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
                           <div>{formatDate(req.creationDate)} · {(req.lines || []).length} שורות</div>
+                          {getDocsForRequisition(req).length > 0 && <FirstPoDoc req={req} onOpen={(doc) => onOpenDoc(doc, null)} />}
                           {isEditing && <InCartTag />}
                         </div>
                         <div className="font-black text-gray-900 dark:text-white">{formatMoney(req.total)}</div>
                       </div>
                       <div className="flex flex-wrap items-center gap-1 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 -mx-1">
-                        {ROW_ACTIONS.filter(a => canDoAction(req.status, a)).map(a => (
+                        {ROW_ACTIONS.filter(a => isRowActionAllowed(req, a)).map(a => (
                           <RowActionButton key={a} action={a} showLabel onClick={() => handleAction(a, req)} />
                         ))}
                       </div>

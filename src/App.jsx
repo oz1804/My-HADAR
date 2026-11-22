@@ -6,6 +6,8 @@ import { useAppData } from './hooks/useAppData'; // <-- ייבוא ה-Hook שי�
 import Login from './components/Login';
 import Navbar from './components/Navbar';
 import MyRequisitions from './components/MyRequisitions';
+import PurchaseOrderDetails from './components/PurchaseOrders/PurchaseOrderDetails';
+import { getPoDocument } from './utils/purchaseOrders';
 import UserGuide from './components/UserGuide';
 import FAQ from './components/FAQ';
 import ProcDocs from './components/ProcDocs';
@@ -16,6 +18,9 @@ import SearchResults from './components/SearchResults';
 import Checkout from './components/Checkout/Checkout';
 import NonCatalogModal from './components/NonCatalogModal';
 import WelcomeModal from './components/WelcomeModal'; 
+import PendingApprovals from './components/PendingApprovals';
+import AdminConsole from './components/Admin/AdminConsole';
+import { getUserRoles, hasRole, ADMIN_ROLE } from './services/umxService';
 
 function App() {
   // סטייטים של תצוגה בלבד
@@ -26,6 +31,7 @@ function App() {
   const [isNonCatalogOpen, setIsNonCatalogOpen] = useState(false);
   const [showOrgPrompt, setShowOrgPrompt] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '' });
+  const [userRoles, setUserRoles] = useState([]); // תפקידי ה-UMX של המשתמש המחובר
 
   const showToast = (message) => {
     setToast({ show: true, message });
@@ -40,15 +46,38 @@ function App() {
   // "שואבים" את כל הלוגיקה העסקית מה-Hook שלנו!
   const appData = useAppData(currentUser, showToast, handleNavigate, setShowOrgPrompt);
 
+  // --- ניווט למסך הזמנה / הוראת משיכה. from = לאן חוזרים ---
+  const openPoDoc = (doc, from, focusPoLineId = null) => handleNavigate('purchase-order', { poHeaderId: doc.poHeaderId, releaseId: doc.releaseId || null, from, focusPoLineId });
+  const poBackLabel = (from) => {
+    if (from?.view === 'purchase-order') {
+      const prev = getPoDocument(from.payload.poHeaderId, from.payload.releaseId);
+      return prev ? `חזרה ל${prev.kind === 'RELEASE' ? 'הוראת משיכה' : 'הזמנה'} ${prev.number}` : 'חזרה';
+    }
+    const req = from?.payload ? appData.myRequisitions.find(r => r.id === from.payload) : null;
+    return req ? `חזרה לדרישה ${req.requisitionNumber}` : 'חזרה לרשימת הדרישות';
+  };
+  // אפשר לפתוח מתוך הזמנה רק דרישה של המשתמש המחובר
+  const canOpenRequisition = (ref) => appData.myRequisitions.some(r => r.id === ref.id && r.creationDate === ref.creationDate);
+
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
   }, [isDarkMode]);
+
+  // טעינת תפקידי ה-UMX של המשתמש (קובעים, למשל, גישה למסכי הניהול)
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    let cancelled = false;
+    getUserRoles(currentUser.id).then(roles => { if (!cancelled) setUserRoles(roles); });
+    return () => { cancelled = true; };
+  }, [currentUser]);
+  const isAdmin = hasRole(userRoles, ADMIN_ROLE);
 
   const handleLogout = () => {
     setCurrentUser(null);
     setCurrentView('home'); 
     setViewPayload(null);
     setShowOrgPrompt(false);
+    setUserRoles([]);
     appData.resetAppData(); // מנקה את הנתונים ב-Hook
   };
 
@@ -84,6 +113,8 @@ function App() {
         globalExpOrg={appData.globalExpOrg} setGlobalExpOrg={appData.handleSetGlobalExpOrg}
         
         onOpenNonCatalog={() => setIsNonCatalogOpen(true)}
+        pendingApprovalsCount={appData.pendingApprovals.length}
+        isAdmin={isAdmin}
         showToast={showToast}
       />
       
@@ -124,8 +155,42 @@ function App() {
             onCopy={appData.copyRequisitionToCart}
             onDelete={appData.deleteRequisition}
             onCancel={appData.cancelRequisition}
+            onCancelLine={appData.cancelRequisitionLine}
             onNavigate={handleNavigate}
             onBackToHome={() => handleNavigate('home')}
+            selectedId={viewPayload}
+            onSelect={(id) => handleNavigate('requisitions', id)}
+            onOpenDoc={(doc, fromRequisitionId, focusPoLineId) => openPoDoc(doc, { view: 'requisitions', payload: fromRequisitionId }, focusPoLineId)}
+          />
+        )}
+
+        {currentView === 'approvals' && (
+          <PendingApprovals
+            requisitions={appData.requisitions}
+            currentUser={currentUser}
+            selectedId={viewPayload}
+            onSelect={(id) => handleNavigate('approvals', id)}
+            onApprove={appData.approveRequisition}
+            onReject={appData.rejectRequisition}
+            onBackToHome={() => handleNavigate('home')}
+          />
+        )}
+
+        {currentView === 'admin' && isAdmin && (
+          <AdminConsole requisitions={appData.requisitions} onBackToHome={() => handleNavigate('home')} />
+        )}
+
+        {currentView === 'purchase-order' && viewPayload && (
+          <PurchaseOrderDetails
+            key={`${viewPayload.poHeaderId}-${viewPayload.releaseId || 0}`}
+            poHeaderId={viewPayload.poHeaderId}
+            releaseId={viewPayload.releaseId}
+            focusPoLineId={viewPayload.focusPoLineId}
+            backLabel={poBackLabel(viewPayload.from)}
+            onBack={() => handleNavigate(viewPayload.from?.view || 'requisitions', viewPayload.from?.payload ?? null)}
+            onOpenDoc={(doc) => openPoDoc(doc, { view: 'purchase-order', payload: viewPayload })}
+            canOpenRequisition={canOpenRequisition}
+            onOpenRequisition={(id) => handleNavigate('requisitions', id)}
           />
         )}
         {currentView === 'user-guide' && <UserGuide onBackToHome={() => handleNavigate('home')} />}
@@ -191,6 +256,7 @@ function App() {
             onSubmit={appData.handleCheckoutSubmit}
             onRemoveFromCart={(id) => appData.updateLineQty(id, 0)} 
             nextRequisitionNumber={appData.nextRequisitionNumber}
+            editingRequisitionId={appData.editingRequisitionId}
             onAddLineToCart={appData.addCheckoutLine}
           />
         )}

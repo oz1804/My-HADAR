@@ -5,6 +5,7 @@ import NavSearch from './NavSearch';
 import NavNikraLink from './NavNikraLink';
 import NavNonCatalogBtn from './NavNonCatalogBtn';
 import NavUserReq from './NavUserReq';
+import NavApprovals from './NavApprovals';
 import KnowledgeAndProcDocs from './KnowledgeAndProcDocs';
 import DefaultsAndFavorites from './DefaultsAndFavorites';
 import DefaultsModal from './DefaultsModal';
@@ -34,6 +35,8 @@ export default function Navbar({
   globalExpOrg,      
   setGlobalExpOrg,   
   onOpenNonCatalog,
+  pendingApprovalsCount = 0,
+  isAdmin = false,
   showToast // <--- קבלת פונקציית ה-Toast מ-App.jsx
 }) {
   const [isDefaultsModalOpen, setIsDefaultsModalOpen] = useState(false);
@@ -50,7 +53,7 @@ export default function Navbar({
         
         <div className="px-2 sm:px-4 md:px-6 py-2 md:py-4 flex items-center justify-between gap-1 sm:gap-2 md:gap-4 w-full flex-nowrap">
 
-          <div className="flex items-center gap-1 sm:gap-2 md:gap-4 2xl:gap-6 flex-1 min-w-0">
+          <div className="flex items-center gap-1 sm:gap-2 lg:gap-4 2xl:gap-6 flex-1 min-w-0">
             <div className="shrink-0">
               <NavbarLogo />
             </div>
@@ -63,21 +66,28 @@ export default function Navbar({
 
             <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
               <NavSearch onNavigate={handleNavigate} />
-              <NavNonCatalogBtn onOpenModal={onOpenNonCatalog} />
+              {/* בטלפון - בתפריט */}
+              <div className="hidden sm:block shrink-0">
+                <NavNonCatalogBtn onOpenModal={onOpenNonCatalog} />
+              </div>
 
-              <div className="hidden 2xl:flex items-center gap-4 shrink-0 ms-2">
+              <div className="hidden min-[1800px]:flex items-center gap-4 shrink-0 ms-2">
                  <NavUserReq onNavigate={() => handleNavigate('requisitions')} />
                  <KnowledgeAndProcDocs onNavigate={handleNavigate} />
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-2 md:gap-4 shrink-0">
-            <div className="hidden md:block shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 lg:gap-4 shrink-0">
+            <div className="hidden lg:block shrink-0">
               <NavNikraLink />
             </div>
 
-            <div className="hidden md:block w-px h-6 bg-gray-200 dark:bg-gray-700 shrink-0"></div>
+            <div className="hidden lg:block w-px h-6 bg-gray-200 dark:bg-gray-700 shrink-0"></div>
+
+ <div className="hidden sm:block shrink-0">
+              <NavApprovals onNavigate={() => handleNavigate('approvals')} count={pendingApprovalsCount} />
+            </div>
 
             <NavCart 
               cartLines={cartLines} 
@@ -85,9 +95,10 @@ export default function Navbar({
               onNavigate={handleNavigate} 
             />
 
-            <div className="hidden md:flex items-center justify-center border-e-2 border-gray-200 dark:border-gray-600 pe-3 md:pe-5 me-1 shrink-0 min-w-[200px]">
+            <div className="hidden 2xl:flex items-center justify-center border-e-2 border-gray-200 dark:border-gray-600 pe-3 md:pe-5 me-1 shrink-0 min-w-[200px]">
               <DefaultsAndFavorites 
                 currentUser={currentUser}
+                isAdmin={isAdmin}
                 onNavigate={handleNavigate} 
                 onOpenDefaultsModal={() => setIsDefaultsModalOpen(true)} 
               />
@@ -105,7 +116,8 @@ export default function Navbar({
 
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="2xl:hidden flex items-center justify-center p-1 sm:p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus:outline-none cursor-pointer shrink-0"
+              aria-label={pendingApprovalsCount > 0 ? `תפריט - ${pendingApprovalsCount} אישורים ממתינים` : 'תפריט'}
+              className="relative min-[1800px]:hidden flex items-center justify-center p-1 sm:p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus:outline-none cursor-pointer shrink-0"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6">
                 {isMobileMenuOpen ? (
@@ -114,37 +126,50 @@ export default function Navbar({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                 )}
               </svg>
+              {/* בטלפון כפתור האישורים נמצא בתפריט - נקודה מסמנת שיש ממתינים */}
+              {pendingApprovalsCount > 0 && !isMobileMenuOpen && <span className="sm:hidden absolute top-0.5 end-0.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-800"></span>}
             </button>
           </div>
         </div>
 
         <div
-          className={`2xl:hidden w-full bg-white dark:bg-gray-800 transition-all duration-300 overflow-hidden shadow-inner ${
+          className={`min-[1800px]:hidden w-full bg-white dark:bg-gray-800 transition-all duration-300 overflow-hidden shadow-inner ${
             isMobileMenuOpen ? 'max-h-[750px] border-t border-gray-100 dark:border-gray-700' : 'max-h-0'
           }`}
         >
           <div className="px-6 py-4 flex flex-col gap-6 overflow-y-auto max-h-[700px]">
 
-            <div className="md:hidden flex flex-col gap-5">
+            <div className="2xl:hidden flex flex-col gap-5">
               
               <div className="flex justify-between items-start bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl">
                 <div className="flex-1 min-w-0">
                   <DefaultsAndFavorites 
                     currentUser={currentUser}
+                    isAdmin={isAdmin}
                     onNavigate={handleNavigate} 
                     onOpenDefaultsModal={() => { setIsDefaultsModalOpen(true); setIsMobileMenuOpen(false); }} 
                   />
                 </div>
               </div>
 
-              <div className="flex flex-col items-start gap-4 pt-2">
+              <div className="lg:hidden flex flex-col items-start gap-4 pt-2">
                 <NavNikraLink />
               </div>
             </div>
 
             <div className="flex flex-col items-start gap-4">
-              <div className="md:hidden w-full h-px bg-gray-100 dark:bg-gray-700"></div>
+              <div className="2xl:hidden w-full h-px bg-gray-100 dark:bg-gray-700"></div>
               <NavUserReq onNavigate={() => handleNavigate('requisitions')} />
+              <div className="sm:hidden">
+                <NavApprovals variant="row" onNavigate={() => handleNavigate('approvals')} count={pendingApprovalsCount} />
+              </div>
+              <button
+                onClick={() => { setIsMobileMenuOpen(false); onOpenNonCatalog(); }}
+                className="sm:hidden shrink-0 flex items-center gap-1.5 px-2 py-2 text-base font-bold text-gray-800 dark:text-gray-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer group"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                <span className="underline-offset-4 group-hover:underline whitespace-nowrap">פריט ללא מק"ט</span>
+              </button>
               <KnowledgeAndProcDocs onNavigate={handleNavigate} />
             </div>
 

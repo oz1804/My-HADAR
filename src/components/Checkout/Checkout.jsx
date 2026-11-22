@@ -3,6 +3,7 @@ import CheckoutHeader from './CheckoutHeader';
 import CheckoutLines from './CheckoutLines';
 import useCheckout from './UseCheckout'; 
 import ApprovalRoutingDrawer from './ApprovalRoutingDrawer';
+import FundsCheckModal from './FundsCheckModal';
 import { validateBudgetForApproval } from '../../utils/budgetValidation';
 
 export default function Checkout({ 
@@ -19,11 +20,13 @@ export default function Checkout({
   onSubmit, 
   onRemoveFromCart, 
   nextRequisitionNumber, 
+  editingRequisitionId = null,
   onAddLineToCart 
 }) {
   
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isApprovalDrawerOpen, setIsApprovalDrawerOpen] = useState(false); 
+  const [isFundsCheckOpen, setIsFundsCheckOpen] = useState(false);
   const [showBudgetErrors, setShowBudgetErrors] = useState(false); // מוצג רק אחרי ניסיון העברה לסבב
   const [budgetFocusKey, setBudgetFocusKey] = useState(0);         // מסמן לרשימת השורות לקפוץ לשגיאה הראשונה
 
@@ -42,6 +45,7 @@ export default function Checkout({
     lines, 
     selectedLineIds, setSelectedLineIds,
     isBudgetMixed, 
+    headerLovText,
     cartTotal,
     hasExpenseLines,
     
@@ -104,13 +108,14 @@ export default function Checkout({
     setIsApprovalDrawerOpen(true);
   };
 
-  const handleApprovalSubmit = (routingSteps) => {
+  // שליחה לאישור: מחזיר את תוצאת השמירה (כולל שגיאת שריון תקציב) כדי שהמגירה תציג אותה
+  const handleApprovalSubmit = async (routingSteps) => {
     if (validateBudgetForApproval(lines).length > 0) {
       setIsApprovalDrawerOpen(false);
       handleApprovalRoutingClick();
-      return;
+      return { ok: false, message: 'חסר סעיף תקציבי בחלק משורות החלוקה' };
     }
-    onSubmit(buildHeaderData(), lines, true, routingSteps, 'IN PROCESS');
+    return onSubmit(buildHeaderData(), lines, true, routingSteps, 'IN PROCESS');
   };
 
   // --- הפתרון הקריטי! פונקציה שמעדכנת גם את הקופה וגם את ה-Navbar יחד ---
@@ -151,8 +156,10 @@ export default function Checkout({
         onHeaderBudgetChange={handleHeaderBudgetChange}
         hasExpenseLines={hasExpenseLines}
         isBudgetMixed={isBudgetMixed}
+        headerLovText={headerLovText}
         onSaveRequestClick={() => setIsSaveModalOpen(true)}
         onApprovalRoutingClick={handleApprovalRoutingClick} 
+        onFundsCheckClick={() => setIsFundsCheckOpen(true)}
         nextRequisitionNumber={nextRequisitionNumber} 
       />
       
@@ -210,14 +217,24 @@ export default function Checkout({
         </div>
       )}
 
-      <ApprovalRoutingDrawer 
+      {isApprovalDrawerOpen && <ApprovalRoutingDrawer 
         isOpen={isApprovalDrawerOpen}
         onClose={() => setIsApprovalDrawerOpen(false)}
         currentUser={currentUser}
         lines={lines}
         headerBuyer={headerBuyer}
+        headerOrg={headerOrg}
+        editingRequisitionId={editingRequisitionId}
         onSubmitApproval={handleApprovalSubmit} 
-      />
+      />}
+
+      {isFundsCheckOpen && <FundsCheckModal
+        isOpen={isFundsCheckOpen}
+        onClose={() => setIsFundsCheckOpen(false)}
+        lines={lines}
+        editingRequisitionId={editingRequisitionId}
+        hasBudgetErrors={budgetErrors.length > 0}
+      />}
 
     </div>
   );

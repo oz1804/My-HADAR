@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import data from '../../data/data.json';
+import { lineHasInvalidBudget } from '../../utils/budgetValidation';
 import CheckoutLineDistributions from './CheckoutLineDistributions';
 
 export default function CheckoutLineRow({ 
@@ -27,7 +28,9 @@ export default function CheckoutLineRow({
   if (!line) return null;
 
   // שורה עם סעיף תקציבי חסר נפתחת אוטומטית כדי שהשדות המסומנים יהיו גלויים
-  const hasBudgetError = !!budgetError;
+  const hasBudgetError = !!budgetError;                 // אחרי ניסיון העברה לסבב
+  const hasInvalidBudget = lineHasInvalidBudget(line);  // ערך לא תקין מול ה-LOV - תמיד
+  const showBudgetFlag = hasBudgetError || hasInvalidBudget;
   const isOpen = isExpanded || (hasBudgetError && !wasClosedByUser);
   const toggleExpanded = () => {
     if (isOpen) { setIsExpanded(false); setWasClosedByUser(true); }
@@ -47,7 +50,7 @@ export default function CheckoutLineRow({
     <div id={`checkout-line-${line.id}`} className={`bg-white dark:bg-gray-800 rounded-xl transition-all duration-200 scroll-mt-28 ${
       isSelected 
         ? 'border-2 border-blue-500 shadow-md ring-4 ring-blue-50 dark:ring-blue-900/20' 
-        : hasBudgetError
+        : showBudgetFlag
           ? 'border-2 border-rose-300 dark:border-rose-700/70 shadow-sm'
           : 'border border-gray-200 dark:border-gray-700 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md'
     }`}>
@@ -67,8 +70,8 @@ export default function CheckoutLineRow({
           <div className="flex flex-col">
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 font-mono mb-0.5">
               <span>מק"ט: {line.sku || 'ללא מק"ט'}</span>
-              {hasBudgetError && (
-                <span className="font-sans text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">חסר סעיף תקציבי</span>
+              {showBudgetFlag && (
+                <span className="font-sans text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">{hasInvalidBudget ? 'סעיף תקציבי לא תקין' : 'חסר סעיף תקציבי'}</span>
               )}
               <span className="w-1 h-1 bg-gray-300 dark:bg-gray-600 rounded-full"></span>
               <span className="flex items-center gap-1" title="קניין מטפל">
@@ -84,9 +87,9 @@ export default function CheckoutLineRow({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-900/50 p-2 px-4 rounded-xl shrink-0">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 w-full sm:flex sm:w-auto sm:items-center sm:gap-4 bg-gray-50 dark:bg-gray-900/50 p-2 px-3 sm:px-4 rounded-xl shrink-0">
           
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center min-w-0">
             <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">כמות</span>
             <div className="flex items-center gap-1">
               <input 
@@ -94,19 +97,19 @@ export default function CheckoutLineRow({
                 min="1"
                 value={line.quantity || 1}
                 onChange={(e) => onLineFieldChange(line.id, 'quantity', Number(e.target.value))}
-                className={`${stealthInputClass} w-16 p-1.5 text-center font-bold text-gray-900 dark:text-white`}
+                className={`${stealthInputClass} w-14 sm:w-16 p-1.5 text-center font-bold text-gray-900 dark:text-white`}
               />
               <span className="text-xs text-gray-500 font-medium">{line.uom}</span>
             </div>
           </div>
 
-          <div className="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
+          <div className="hidden sm:block h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
 
           {/* מחיר יחידה */}
-          <div className="flex flex-col items-center min-w-[100px]">
+          <div className="flex flex-col items-center min-w-0 sm:min-w-[100px]">
             <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">מחיר יחידה</span>
-            <div className="flex items-center justify-center w-24">
-              <span className="font-bold text-gray-900 dark:text-white text-sm ml-1">{currencySymbol}</span>
+            <div className="flex items-center justify-center w-full sm:w-24 min-w-0">
+              <span className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm ml-1 shrink-0">{currencySymbol}</span>
               {isPriceEditable ? (
                 <input 
                   type="number" 
@@ -114,10 +117,10 @@ export default function CheckoutLineRow({
                   value={line.unitPrice || ''}
                   onChange={(e) => onLineFieldChange(line.id, 'unitPrice', Number(e.target.value))}
                   placeholder="0.00"
-                  className={`${stealthInputClass} w-20 p-1 text-right font-bold text-gray-900 dark:text-white`}
+                  className={`${stealthInputClass.replace(' text-sm ', ' ')} w-full min-w-0 sm:w-20 p-1 text-right text-xs sm:text-sm font-bold text-gray-900 dark:text-white`}
                 />
               ) : (
-                <div className="w-20 p-1 text-right font-bold text-gray-900 dark:text-white text-sm cursor-default truncate">
+                <div className="min-w-0 sm:w-20 p-1 text-right font-bold text-gray-900 dark:text-white text-xs sm:text-sm cursor-default truncate">
                   {Number(line.unitPrice || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
                 </div>
               )}
@@ -133,10 +136,10 @@ export default function CheckoutLineRow({
             )}
           </div>
 
-          <div className="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
+          <div className="hidden sm:block h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
 
           {/* ערך שורה כולל בש"ח */}
-          <div className="flex flex-col items-center min-w-[110px]">
+          <div className="flex flex-col items-center min-w-0 sm:min-w-[110px]">
             <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">ערך שורה ₪</span>
             {isForeignCurrency && (!line.rate || line.rate === 1) ? (
               <span className="text-[11px] text-amber-500 font-bold text-center leading-tight">
@@ -144,7 +147,7 @@ export default function CheckoutLineRow({
               </span>
             ) : (
               <div className="flex flex-col items-center">
-                <span className="font-black text-gray-900 dark:text-white text-sm">
+                <span className="font-black text-gray-900 dark:text-white text-xs sm:text-sm whitespace-nowrap">
                   ₪{(Number(line.unitPrice || 0) * (line.quantity || 1) * (line.rate || 1)).toLocaleString(undefined, {minimumFractionDigits: 2})}
                 </span>
                 {isForeignCurrency && line.rate && line.rate !== 1 && (

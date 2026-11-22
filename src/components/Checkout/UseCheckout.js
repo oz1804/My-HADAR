@@ -30,6 +30,7 @@ export default function useCheckout({
   const [lines, setLines] = useState([]);
   const [selectedLineIds, setSelectedLineIds] = useState([]);
   const [isBudgetMixed, setIsBudgetMixed] = useState(false);
+  const [headerLovText, setHeaderLovText] = useState({}); // טקסט שהוקלד בתקציב הכותרת ולא זוהה ברשימה
 
   useEffect(() => {
     if (cartLines && cartLines.length > 0) {
@@ -138,11 +139,13 @@ export default function useCheckout({
     
     if (allDists.length > 0) {
       const firstDist = allDists[0];
+      const sameText = (d, f) => String(d.lovText?.[f] || '') === String(firstDist.lovText?.[f] || '');
       const isMixed = !allDists.every(d => 
         String(d.projectId || '') === String(firstDist.projectId || '') &&
         String(d.taskId || '') === String(firstDist.taskId || '') &&
         String(d.expenditureTypeId || '') === String(firstDist.expenditureTypeId || '') &&
-        String(d.expenditureOrgId || '') === String(firstDist.expenditureOrgId || '')
+        String(d.expenditureOrgId || '') === String(firstDist.expenditureOrgId || '') &&
+        ['projectId', 'taskId', 'expenditureTypeId', 'expenditureOrgId'].every(f => sameText(d, f))
       );
       
       setIsBudgetMixed(isMixed);
@@ -152,6 +155,7 @@ export default function useCheckout({
         setHeaderTaskId(firstDist.taskId || '');
         setHeaderExpTypeId(firstDist.expenditureTypeId || '');
         setHeaderExpOrgId(firstDist.expenditureOrgId || '');
+        setHeaderLovText(firstDist.lovText || {});
       }
     } else {
       setIsBudgetMixed(false);
@@ -231,7 +235,8 @@ export default function useCheckout({
             projectId: bd.projectId === '__MIXED__' ? '' : bd.projectId,
             taskId: bd.taskId === '__MIXED__' ? '' : bd.taskId,
             expenditureTypeId: bd.expenditureTypeId === '__MIXED__' ? '' : bd.expenditureTypeId,
-            expenditureOrgId: bd.expenditureOrgId === '__MIXED__' ? '' : bd.expenditureOrgId
+            expenditureOrgId: bd.expenditureOrgId === '__MIXED__' ? '' : bd.expenditureOrgId,
+            lovText: { ...(bd.lovText || {}) }   // טקסט שהוקלד ולא זוהה - כדי שיוצג כשגיאה בשורה
           };
         });
       }
@@ -285,7 +290,8 @@ export default function useCheckout({
         projectId: dist.projectId || '',
         taskId: dist.taskId || '',
         expenditureTypeId: dist.expenditureTypeId || '',
-        expenditureOrgId: dist.expenditureOrgId || currentInvOrg
+        expenditureOrgId: dist.expenditureOrgId || (dist.lovText?.expenditureOrgId ? '' : currentInvOrg),
+        lovText: { ...(dist.lovText || {}) }
       }))
     };
 
@@ -324,17 +330,25 @@ export default function useCheckout({
     }
   };
 
-  const handleHeaderBudgetChange = (field, value) => {
+  // text = טקסט שהוקלד ולא זוהה ברשימה - מחלחל לשורות יחד עם הערך כדי שיוצג ויסומן כשגיאה
+  const handleHeaderBudgetChange = (field, value, text = '') => {
     if (field === 'projectId') setHeaderProjectId(value);
     if (field === 'taskId') setHeaderTaskId(value);
     if (field === 'expenditureTypeId') setHeaderExpTypeId(value);
     if (field === 'expenditureOrgId') setHeaderExpOrgId(value);
+    const withText = (obj) => {
+      const next = { ...(obj || {}) };
+      if (text) next[field] = text; else delete next[field];
+      return next;
+    };
+    setHeaderLovText(prev => withText(prev));
 
     setLines(prevLines => prevLines.map(line => ({
       ...line,
       distributions: (line.distributions || []).map(dist => ({
         ...dist,
-        [field]: value
+        [field]: value,
+        lovText: withText(dist.lovText)
       }))
     })));
   };
@@ -445,6 +459,7 @@ export default function useCheckout({
     lines, setLines,
     selectedLineIds, setSelectedLineIds,
     isBudgetMixed, setIsBudgetMixed,
+    headerLovText,
     cartTotal,
     hasExpenseLines,
     

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import data from '../../data/data.json';
+import BudgetLovFields, { BudgetErrorBox } from './BudgetLovFields';
+import { getInvalidDistFields } from '../../utils/budgetValidation';
 
 export default function BulkEditForm({
   selectedLineIds,
@@ -90,7 +92,8 @@ export default function BulkEditForm({
         projectId: last?.projectId || '',
         taskId: last?.taskId || '',
         expenditureTypeId: last?.expenditureTypeId || '',
-        expenditureOrgId: last?.expenditureOrgId || ''
+        expenditureOrgId: last?.expenditureOrgId || '',
+        lovText: { ...(last?.lovText || {}) }
       }];
     });
   };
@@ -120,8 +123,6 @@ export default function BulkEditForm({
     onClose();
   };
 
-  const today = new Date().toISOString().split('T')[0];
-  const isItemActive = (item) => (!item?.startDate || item.startDate <= today) && (!item?.endDate || item.endDate >= today);
 
   const selectedOrgs = [...new Set(selectedLinesData.map(l => l.inventoryOrg).filter(Boolean))];
   const isAllInventory = selectedLinesData.length > 0 && selectedLinesData.every(l => l.destinationType === 'Inventory');
@@ -289,14 +290,27 @@ export default function BulkEditForm({
         
         {bulkDists.map((dist, idx) => {
           const isBulkInventory = bulkFields.destinationType === 'Inventory' || (bulkFields.destinationType === '__MIXED__' && isAllInventory);
-          const selProj = dist.projectId && dist.projectId !== '__MIXED__' ? data.projects?.find(p => p.id === Number(dist.projectId)) : null;
+          // ארגוני המלאי אחרי העדכון: הארגון שנבחר בטופס, או הארגונים הקיימים של השורות
+          const effectiveOrgs = bulkFields.inventoryOrg && bulkFields.inventoryOrg !== '__MIXED__' ? [bulkFields.inventoryOrg] : selectedOrgs;
 
-          const availProjs = data.projects?.filter(p => {
-            if (!isItemActive(p)) return false;
-            if (selectedOrgs.length > 0 && !selectedOrgs.every(orgId => p.inventoryOrgIds?.includes(Number(orgId)))) return false;
-            if (isBulkInventory && !p.allowedExpenditureTypeIds?.includes(4)) return false;
-            return true;
+          // בדיקת החלוקה מול כל אחת מהשורות הנבחרות (לפי היעד והארגון שיהיו להן אחרי העדכון)
+          const distErrors = [];
+          selectedLinesData.forEach(line => {
+            const effLine = {
+              ...line,
+              destinationType: bulkFields.destinationType && bulkFields.destinationType !== '__MIXED__' ? bulkFields.destinationType : line.destinationType,
+              inventoryOrg: bulkFields.inventoryOrg && bulkFields.inventoryOrg !== '__MIXED__' ? bulkFields.inventoryOrg : line.inventoryOrg
+            };
+            getInvalidDistFields(effLine, dist).forEach(err => {
+              if (!distErrors.some(e => e.message === err.message)) distErrors.push(err);
+            });
           });
+          const commitBulkLov = (field, { value, text }) => {
+            handleBulkDistChange(dist.id, field, value === '' ? '' : Number(value));
+            const nextText = { ...(dist.lovText || {}) };
+            if (text) nextText[field] = text; else delete nextText[field];
+            handleBulkDistChange(dist.id, 'lovText', nextText);
+          };
 
           return (
             <div key={dist.id} className="flex flex-col gap-3 p-3 mb-3 bg-white dark:bg-gray-800 border border-blue-100 dark:border-blue-900/50 rounded-xl shadow-sm">
@@ -319,46 +333,15 @@ export default function BulkEditForm({
                   )}
                 </div>
 
-                <div className={`grid grid-cols-2 ${!isBulkInventory ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-2 flex-1`}>
-                  <div className="flex flex-col">
-                    <label className="text-[10px] text-gray-500 font-bold mb-0.5">פרויקט</label>
-                    <select value={dist.projectId || '__MIXED__'} onChange={(e) => handleBulkDistChange(dist.id, 'projectId', Number(e.target.value))} className={bulkSelectClass}>
-                      <option value="__MIXED__" disabled hidden>-- ערכים שונים --</option>
-                      {availProjs?.map(p => <option key={p.id} value={p.id}>{p.projectCode} - {p.projectName}</option>)}
-                    </select>
-                  </div>
-                  
-                  <div className="flex flex-col">
-                    <label className="text-[10px] text-gray-500 font-bold mb-0.5">משימה</label>
-                    <select value={dist.taskId || '__MIXED__'} onChange={(e) => handleBulkDistChange(dist.id, 'taskId', Number(e.target.value))} className={bulkSelectClass}>
-                      <option value="__MIXED__" disabled hidden>-- ערכים שונים --</option>
-                      {data.tasks?.filter(t => (!dist.projectId || t.projectId === dist.projectId) && isItemActive(t)).map(t => <option key={t.id} value={t.id}>{t.taskCode} - {t.taskName}</option>)}
-                    </select>
-                  </div>
-
-                  {!isBulkInventory && (
-                    <>
-                      <div className="flex flex-col">
-                        <label className="text-[10px] text-gray-500 font-bold mb-0.5">סוג הוצאה</label>
-                        <select value={dist.expenditureTypeId || '__MIXED__'} onChange={(e) => handleBulkDistChange(dist.id, 'expenditureTypeId', Number(e.target.value))} className={bulkSelectClass}>
-                          <option value="__MIXED__" disabled hidden>-- ערכים שונים --</option>
-                          {data.expenditureTypes?.filter(et => {
-                            if (!isItemActive(et)) return false;
-                            if (selProj?.allowedExpenditureTypeIds && !selProj.allowedExpenditureTypeIds.includes(et.id)) return false;
-                            return true;
-                          }).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                        </select>
-                      </div>
-
-                      <div className="flex flex-col">
-                        <label className="text-[10px] text-gray-500 font-bold mb-0.5">יחידה מממנת</label>
-                        <select value={dist.expenditureOrgId || '__MIXED__'} onChange={(e) => handleBulkDistChange(dist.id, 'expenditureOrgId', Number(e.target.value))} className={bulkSelectClass}>
-                          <option value="__MIXED__" disabled hidden>-- ערכים שונים --</option>
-                          {data.expenditureOrganizations?.filter(isItemActive).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                        </select>
-                      </div>
-                    </>
-                  )}
+                <div className={`grid grid-cols-1 sm:grid-cols-2 ${!isBulkInventory ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-2 grow basis-full lg:basis-0 min-w-0`}>
+                  <BudgetLovFields
+                    dist={dist}
+                    orgIds={effectiveOrgs}
+                    isInventory={isBulkInventory}
+                    onCommit={commitBulkLov}
+                    badFields={distErrors.map(e => e.field)}
+                    labelClassName="text-[10px] text-gray-500 font-bold mb-0.5"
+                  />
                 </div>
                 
                 {bulkDists.length > 1 && (
@@ -367,6 +350,7 @@ export default function BulkEditForm({
                   </button>
                 )}
               </div>
+              <BudgetErrorBox errors={distErrors} />
             </div>
           );
         })}

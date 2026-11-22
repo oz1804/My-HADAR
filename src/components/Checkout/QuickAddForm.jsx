@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import data from '../../data/data.json';
+import BudgetLovFields, { BudgetErrorBox } from './BudgetLovFields';
+import { getInvalidDistFields } from '../../utils/budgetValidation';
 
 export default function QuickAddForm({
   onAddNewLine,
@@ -241,7 +243,8 @@ export default function QuickAddForm({
         projectId: last?.projectId || headerProjectId || globalProject || '',
         taskId: last?.taskId || headerTaskId || globalTask || '',
         expenditureTypeId: quickDest === 'Inventory' ? '' : (last?.expenditureTypeId || headerExpTypeId || globalExpType || ''),
-        expenditureOrgId: quickDest === 'Inventory' ? '' : (last?.expenditureOrgId || headerExpOrgId || globalExpOrg || '')
+        expenditureOrgId: quickDest === 'Inventory' ? '' : (last?.expenditureOrgId || headerExpOrgId || globalExpOrg || ''),
+        lovText: { ...(last?.lovText || {}) }
       }];
     });
   };
@@ -318,8 +321,6 @@ export default function QuickAddForm({
     if (hasLines && onClose) onClose();
   };
 
-  const today = new Date().toISOString().split('T')[0];
-  const isItemActive = (item) => (!item?.startDate || item.startDate <= today) && (!item?.endDate || item.endDate >= today);
 
   const quickInputClass = "w-full p-2.5 border border-emerald-200 dark:border-emerald-800/50 rounded-lg bg-white dark:bg-gray-800 text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all disabled:bg-gray-100 disabled:dark:bg-gray-900/50 disabled:text-gray-500";
   const errorInputClass = "border-red-500 bg-red-50 dark:bg-red-900/10 ring-1 ring-red-500 focus:ring-red-500";
@@ -328,12 +329,6 @@ export default function QuickAddForm({
   const activeQuickOrg = quickOrg || '';
   const quickIsInventory = quickDest === 'Inventory';
 
-  const quickAvailableProjects = data.projects?.filter(p => {
-    if (!isItemActive(p)) return false;
-    if (activeQuickOrg && !p.inventoryOrgIds?.includes(Number(activeQuickOrg))) return false;
-    if (quickIsInventory && !p.allowedExpenditureTypeIds?.includes(4)) return false;
-    return true;
-  });
 
   return (
     <div className="bg-gradient-to-l from-emerald-50/50 to-white dark:from-emerald-900/10 dark:to-gray-800 rounded-2xl shadow-sm border-t-4 border-t-emerald-500 border-x border-b border-gray-100 dark:border-gray-700 p-6 mt-4 mb-4 animate-fade-in relative z-20 transition-all duration-300">
@@ -551,7 +546,14 @@ export default function QuickAddForm({
            <h5 className="font-extrabold text-sm text-emerald-800 dark:text-emerald-300 mb-3">חלוקה תקציבית (לשורה החדשה)</h5>
            
            {quickDists.map((dist, idx) => {
-             const distProj = dist.projectId ? data.projects?.find(p => p.id === Number(dist.projectId)) : null;
+             // בדיקת החלוקה מול ה-LOV לפי היעד והארגון של השורה החדשה
+             const distErrors = getInvalidDistFields({ destinationType: quickDest, inventoryOrg: activeQuickOrg }, dist);
+             const commitQuickLov = (field, { value, text }) => {
+               handleQuickDistFieldChange(dist.id, field, value === '' ? '' : Number(value));
+               const nextText = { ...(dist.lovText || {}) };
+               if (text) nextText[field] = text; else delete nextText[field];
+               handleQuickDistFieldChange(dist.id, 'lovText', nextText);
+             };
              
              return (
                <div key={dist.id} className="flex flex-col gap-3 p-3 mb-3 bg-white dark:bg-gray-800 border border-emerald-100 dark:border-emerald-900/50 rounded-xl shadow-sm">
@@ -569,43 +571,15 @@ export default function QuickAddForm({
                      </div>
                    </div>
 
-                   <div className={`grid grid-cols-2 ${!quickIsInventory ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-2 flex-1`}>
-                     <div className="flex flex-col">
-                       <label className={quickLabelClass}>פרויקט</label>
-                       <select value={dist.projectId || ''} onChange={(e) => handleQuickDistFieldChange(dist.id, 'projectId', Number(e.target.value))} className={quickInputClass}>
-                         <option value="">בחר פרויקט...</option>
-                         {quickAvailableProjects?.map(p => <option key={p.id} value={p.id}>{p.projectCode} - {p.projectName}</option>)}
-                       </select>
-                     </div>
-                     <div className="flex flex-col">
-                       <label className={quickLabelClass}>משימה</label>
-                       <select value={dist.taskId || ''} onChange={(e) => handleQuickDistFieldChange(dist.id, 'taskId', Number(e.target.value))} className={quickInputClass}>
-                         <option value="">בחר משימה...</option>
-                         {data.tasks?.filter(t => (!dist.projectId || t.projectId === dist.projectId) && isItemActive(t)).map(t => <option key={t.id} value={t.id}>{t.taskCode} - {t.taskName}</option>)}
-                       </select>
-                     </div>
-                     {!quickIsInventory && (
-                       <>
-                         <div className="flex flex-col">
-                           <label className={quickLabelClass}>סוג הוצאה</label>
-                           <select value={dist.expenditureTypeId || ''} onChange={(e) => handleQuickDistFieldChange(dist.id, 'expenditureTypeId', Number(e.target.value))} className={quickInputClass}>
-                             <option value="">בחר סוג הוצאה...</option>
-                             {data.expenditureTypes?.filter(et => {
-                               if (!isItemActive(et)) return false;
-                               if (distProj?.allowedExpenditureTypeIds && !distProj.allowedExpenditureTypeIds.includes(et.id)) return false;
-                               return true;
-                             }).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                           </select>
-                         </div>
-                         <div className="flex flex-col">
-                           <label className={quickLabelClass}>יחידה מממנת</label>
-                           <select value={dist.expenditureOrgId || ''} onChange={(e) => handleQuickDistFieldChange(dist.id, 'expenditureOrgId', Number(e.target.value))} className={quickInputClass}>
-                             <option value="">בחר יחידה...</option>
-                             {data.expenditureOrganizations?.filter(isItemActive).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                           </select>
-                         </div>
-                       </>
-                     )}
+                   <div className={`grid grid-cols-1 sm:grid-cols-2 ${!quickIsInventory ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-2 grow basis-full lg:basis-0 min-w-0`}>
+                     <BudgetLovFields
+                       dist={dist}
+                       orgIds={activeQuickOrg ? [activeQuickOrg] : []}
+                       isInventory={quickIsInventory}
+                       onCommit={commitQuickLov}
+                       badFields={distErrors.map(e => e.field)}
+                       labelClassName={quickLabelClass}
+                     />
                    </div>
                    
                    {quickDists.length > 1 && (
@@ -614,6 +588,7 @@ export default function QuickAddForm({
                      </button>
                    )}
                  </div>
+                 <BudgetErrorBox errors={distErrors} />
                </div>
              );
            })}

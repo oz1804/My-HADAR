@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import DocumentsModal from './DocumentsModal';
 import data from '../../data/data.json';
+import LovCombobox from './LovCombobox';
+import { getInvalidDistFields, isPurchasingAllowed, BUDGET_SETUP_CONTACT } from '../../utils/budgetValidation';
 
 export default function CheckoutHeader({ 
   cartTotal, 
@@ -27,8 +29,10 @@ export default function CheckoutHeader({
   onHeaderBudgetChange,
   hasExpenseLines,
   isBudgetMixed,
+  headerLovText = {},
   onSaveRequestClick,
   onApprovalRoutingClick,
+  onFundsCheckClick,
   nextRequisitionNumber
 }) {
   const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
@@ -42,6 +46,21 @@ export default function CheckoutHeader({
   };
 
   const selectedProject = headerProjectId ? data.projects?.find(p => p.id === Number(headerProjectId)) : null;
+
+  // --- רשימות הערכים (LOV) של תקציב הכותרת ---
+  const headerOrgId = headerOrg && headerOrg !== 'mixed' ? headerOrg : null;
+  const lovProjects = data.projects?.filter(p => isItemActive(p) && (!headerOrgId || p.inventoryOrgIds?.includes(Number(headerOrgId))));
+  const lovTasks = data.tasks?.filter(t => (!headerProjectId || t.projectId === Number(headerProjectId)) && isItemActive(t));
+  const lovExpTypes = data.expenditureTypes?.filter(et => isItemActive(et) && (!selectedProject?.allowedExpenditureTypeIds || selectedProject.allowedExpenditureTypeIds.includes(et.id)));
+  const lovExpOrgs = data.expenditureOrganizations?.filter(org => isItemActive(org) && isPurchasingAllowed(org));
+
+  // --- בדיקת תקציב הכותרת מול ה-LOV (אותה בדיקה כמו בשורות החלוקה) ---
+  const headerBudgetErrors = isBudgetMixed ? [] : getInvalidDistFields(
+    { destinationType: hasExpenseLines ? 'Expense' : 'Inventory', inventoryOrg: headerOrgId },
+    { projectId: headerProjectId, taskId: headerTaskId, expenditureTypeId: headerExpTypeId, expenditureOrgId: headerExpOrgId, lovText: headerLovText }
+  );
+  const headerBadFields = headerBudgetErrors.map(e => e.field);
+  const commitHeader = (field) => ({ value, text }) => onHeaderBudgetChange(field, value, text);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -190,82 +209,98 @@ export default function CheckoutHeader({
               <>
                 <div className="flex flex-col">
                   <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">פרויקט</label>
-                  <select 
-                    value={headerProjectId || ''}
-                    onChange={(e) => onHeaderBudgetChange('projectId', e.target.value)}
-                    className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
-                  >
-                    <option value="">בחר פרויקט...</option>
-                    {data.projects
-                      ?.filter(p => {
-                        if (!isItemActive(p)) return false;
-                        if (headerOrg && headerOrg !== 'mixed' && !p.inventoryOrgIds?.includes(Number(headerOrg))) return false;
-                        return true;
-                      })
-                      .map(p => (
-                        <option key={p.id} value={p.id}>{p.projectCode} - {p.projectName}</option>
-                      ))}
-                  </select>
+                  <LovCombobox
+                    size="md"
+                    ariaLabel="פרויקט (כותרת)"
+                    items={data.projects}
+                    validItems={lovProjects}
+                    value={headerProjectId}
+                    text={headerLovText.projectId || ''}
+                    getCode={p => p.projectCode}
+                    getName={p => p.projectName}
+                    getDisplay={p => `${p.projectCode} - ${p.projectName}`}
+                    onCommit={commitHeader('projectId')}
+                    placeholder="הקלד פרויקט..."
+                    invalid={headerBadFields.includes('projectId')}
+                  />
                 </div>
 
                 <div className="flex flex-col">
                   <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">משימה</label>
-                  <select 
-                    value={headerTaskId || ''}
-                    onChange={(e) => onHeaderBudgetChange('taskId', e.target.value)}
-                    className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
-                  >
-                    <option value="">בחר משימה...</option>
-                    {data.tasks
-                      ?.filter(t => (!headerProjectId || t.projectId === Number(headerProjectId)) && isItemActive(t))
-                      .map(t => (
-                        <option key={t.id} value={t.id}>{t.taskCode} - {t.taskName}</option>
-                      ))}
-                  </select>
+                  <LovCombobox
+                    size="md"
+                    ariaLabel="משימה (כותרת)"
+                    items={data.tasks}
+                    validItems={lovTasks}
+                    value={headerTaskId}
+                    text={headerLovText.taskId || ''}
+                    getCode={t => t.taskCode}
+                    getName={t => t.taskName}
+                    getDisplay={t => `${t.taskCode} - ${t.taskName}`}
+                    prefer={t => String(t.projectId) === String(headerProjectId)}
+                    onCommit={commitHeader('taskId')}
+                    placeholder="הקלד משימה..."
+                    invalid={headerBadFields.includes('taskId')}
+                  />
                 </div>
 
                 {hasExpenseLines && (
                   <>
                     <div className="flex flex-col">
                       <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">סוג הוצאה</label>
-                      <select 
-                        value={headerExpTypeId || ''}
-                        onChange={(e) => onHeaderBudgetChange('expenditureTypeId', e.target.value)}
-                        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
-                      >
-                        <option value="">בחר סוג הוצאה...</option>
-                        {data.expenditureTypes
-                          ?.filter(et => {
-                            if (!isItemActive(et)) return false;
-                            if (selectedProject?.allowedExpenditureTypeIds) {
-                              return selectedProject.allowedExpenditureTypeIds.includes(et.id);
-                            }
-                            return true;
-                          })
-                          .map(et => (
-                            <option key={et.id} value={et.id}>{et.expenditureTypeCode} - {et.name}</option>
-                          ))}
-                      </select>
+                      <LovCombobox
+                        size="md"
+                        ariaLabel="סוג הוצאה (כותרת)"
+                        items={data.expenditureTypes}
+                        validItems={lovExpTypes}
+                        value={headerExpTypeId}
+                        text={headerLovText.expenditureTypeId || ''}
+                        getCode={et => et.expenditureTypeCode}
+                        getName={et => et.name}
+                        getDisplay={et => `${et.expenditureTypeCode} - ${et.name}`}
+                        onCommit={commitHeader('expenditureTypeId')}
+                        placeholder="הקלד סוג הוצאה..."
+                        invalid={headerBadFields.includes('expenditureTypeId')}
+                      />
                     </div>
 
                     <div className="flex flex-col">
                       <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">יחידה מממנת</label>
-                      <select 
-                        value={headerExpOrgId || ''}
-                        onChange={(e) => onHeaderBudgetChange('expenditureOrgId', e.target.value)}
-                        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
-                      >
-                        <option value="">בחר יחידה מממנת...</option>
-                        {data.expenditureOrganizations?.filter(isItemActive).map(org => (
-                          <option key={org.id} value={org.id}>{org.name}</option>
-                        ))}
-                      </select>
+                      <LovCombobox
+                        size="md"
+                        ariaLabel="יחידה מממנת (כותרת)"
+                        items={data.expenditureOrganizations}
+                        validItems={lovExpOrgs}
+                        value={headerExpOrgId}
+                        text={headerLovText.expenditureOrgId || ''}
+                        getCode={o => o.name.split(' - ')[0]}
+                        getName={o => o.name.split(' - ').slice(1).join(' - ')}
+                        getDisplay={o => o.name}
+                        onCommit={commitHeader('expenditureOrgId')}
+                        placeholder="הקלד יחידה מממנת..."
+                        invalid={headerBadFields.includes('expenditureOrgId')}
+                      />
                     </div>
                   </>
                 )}
               </>
             )}
           </div>
+
+          {/* --- שגיאות בתקציב הכותרת (מחלחלות לכל השורות) --- */}
+          {headerBudgetErrors.length > 0 && (
+            <div role="alert" className="mt-4 flex items-start gap-2 p-3 rounded-xl border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-900/20">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-rose-500 shrink-0 mt-0.5">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+              </svg>
+              <div className="text-xs text-rose-700 dark:text-rose-300 min-w-0">
+                <ul className="space-y-0.5 font-semibold">
+                  {headerBudgetErrors.map(err => <li key={err.field}>{err.message}</li>)}
+                </ul>
+                {headerBudgetErrors.some(e => e.needsSetup) && <p className="mt-1 font-bold">{BUDGET_SETUP_CONTACT}</p>}
+              </div>
+            </div>
+          )}
           
         </div>
 
@@ -325,6 +360,14 @@ export default function CheckoutHeader({
               >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" /></svg>
                 שמור דרישה
+              </button>
+
+              <button 
+                onClick={onFundsCheckClick}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-900/30 dark:to-emerald-900/50 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-sm font-bold text-emerald-800 dark:text-emerald-200 hover:from-emerald-100 hover:to-emerald-200 dark:hover:from-emerald-900/50 dark:hover:to-emerald-900/70 transition-all cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" /></svg>
+                בדיקת תקציב
               </button>
 
               <button 

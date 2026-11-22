@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-export default function DefaultsAndFavorites({ currentUser, onNavigate, onOpenDefaultsModal }) {
+export default function DefaultsAndFavorites({ currentUser, isAdmin = false, onNavigate, onOpenDefaultsModal }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -79,6 +79,17 @@ export default function DefaultsAndFavorites({ currentUser, onNavigate, onOpenDe
                 פריטים מועדפים
               </button>
             </li>
+            {/* מוצג רק למשתמש עם תפקיד UMX|HADAR_ADMIN */}
+            {isAdmin && (
+              <li className="md:border-t border-gray-100 dark:border-gray-700">
+                <button 
+                  onClick={() => handleAction('admin')} 
+                  className="w-full flex items-center gap-2 text-start px-3 py-2.5 md:px-4 md:py-3 text-sm font-bold text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 md:hover:bg-blue-50 md:dark:hover:bg-blue-900/30 transition-colors"
+                >
+                  ניהול מערכת
+                </button>
+              </li>
+            )}
           </ul>
         </div>
       )}

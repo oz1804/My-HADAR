@@ -1,6 +1,6 @@
-import React from 'react';
 import data from '../../data/data.json';
-import { getMissingDistFields } from '../../utils/budgetValidation';
+import { getMissingDistFields, getInvalidDistFields, isPurchasingAllowed, getLovText, BUDGET_SETUP_CONTACT } from '../../utils/budgetValidation';
+import LovCombobox from './LovCombobox';
 
 export default function CheckoutLineDistributionRow({ 
   dist, 
@@ -13,14 +13,14 @@ export default function CheckoutLineDistributionRow({
 }) {
   const isInventory = line.destinationType === 'Inventory';
 
-  // --- סימון שדות סעיף תקציבי חסרים (רק אחרי ניסיון העברה לסבב) ---
+  // --- סימון שדות סעיף תקציבי ---
+  // חסרים: רק אחרי ניסיון העברה לסבב. לא תקינים מול ה-LOV: תמיד, כדי שהמשתמש יראה מיד
   const missingFields = showBudgetErrors ? getMissingDistFields(line, dist) : [];
-  const hasMissing = missingFields.length > 0;
-  const selectClass = (field) => `w-full p-1 border rounded text-xs outline-none focus:border-blue-500 ${
-    missingFields.includes(field)
-      ? 'border-rose-400 dark:border-rose-600 bg-rose-50 dark:bg-rose-900/20 ring-1 ring-rose-200 dark:ring-rose-900/40'
-      : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
-  }`;
+  const invalidErrors = getInvalidDistFields(line, dist);
+  const invalidFields = invalidErrors.map(e => e.field);
+  const needsSetup = invalidErrors.some(e => e.needsSetup);
+  const hasMissing = missingFields.length > 0 || invalidErrors.length > 0;
+  const isFieldBad = (field) => missingFields.includes(field) || invalidFields.includes(field);
   const requiredMark = <span className="text-rose-500 ms-0.5">*</span>;
 
   // --- לוגיקת סינון תוקף (Dates) ---
@@ -47,6 +47,24 @@ export default function CheckoutLineDistributionRow({
     return true;
   });
 
+  // שמירת ערך מה-LOV: המזהה בשדה, וטקסט שלא זוהה ב-lovText (כדי שיוצג ויסומן כשגיאה)
+  const commitLov = (field) => ({ value, text }) => {
+    onDistFieldChange(line.id, dist.id, field, value);
+    const nextText = { ...(dist.lovText || {}) };
+    if (text) nextText[field] = text; else delete nextText[field];
+    onDistFieldChange(line.id, dist.id, 'lovText', nextText);
+  };
+
+  const availableTasks = data.tasks?.filter(t => (!dist.projectId || t.projectId === Number(dist.projectId)) && isItemActive(t));
+  const selectedProject = dist.projectId ? data.projects?.find(p => p.id === Number(dist.projectId)) : null;
+  const availableExpTypes = data.expenditureTypes?.filter(e => {
+    if (!isItemActive(e)) return false;
+    if (selectedProject?.allowedExpenditureTypeIds) return selectedProject.allowedExpenditureTypeIds.includes(e.id);
+    return true;
+  });
+  // יחידה מממנת: בתוקף ומורשית לרכש
+  const availableExpOrgs = data.expenditureOrganizations?.filter(org => isItemActive(org) && isPurchasingAllowed(org));
+
   return (
     <div className={`flex flex-col gap-3 p-3 bg-white dark:bg-gray-800 border rounded-xl relative transition-colors ${hasMissing ? 'border-rose-300 dark:border-rose-700/70' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'}`}>
       
@@ -55,7 +73,7 @@ export default function CheckoutLineDistributionRow({
           {index + 1}.
         </div>
 
-        <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900/50 p-1.5 px-3 rounded-lg shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 bg-gray-50 dark:bg-gray-900/50 p-1.5 px-2 sm:px-3 rounded-lg min-w-0">
           <div className="flex flex-col">
             <label className="text-[10px] text-gray-500 font-bold mb-0.5">כמות</label>
             <input 
@@ -103,73 +121,90 @@ export default function CheckoutLineDistributionRow({
       <div className={`grid grid-cols-2 ${isInventory ? 'lg:grid-cols-2' : 'lg:grid-cols-4'} gap-2 w-full lg:pl-12 pt-2 border-t border-gray-100 dark:border-gray-700/50 mt-1`}>
         <div className="flex flex-col">
           <label className="text-[10px] text-gray-500 font-bold mb-0.5">פרויקט{requiredMark}</label>
-          <select 
-            value={dist.projectId || ''}
-            onChange={(e) => onDistFieldChange(line.id, dist.id, 'projectId', e.target.value)}
-            className={selectClass('projectId')}
-            aria-invalid={missingFields.includes('projectId')}
-          >
-            <option value="">בחר פרויקט...</option>
-            {availableProjects?.map(p => <option key={p.id} value={p.id}>{p.projectCode}</option>)}
-          </select>
+          <LovCombobox
+            ariaLabel="פרויקט"
+            items={data.projects}
+            validItems={availableProjects}
+            value={dist.projectId}
+            text={getLovText(dist, 'projectId')}
+            getCode={p => p.projectCode}
+            getName={p => p.projectName}
+            onCommit={commitLov('projectId')}
+            placeholder="הקלד פרויקט..."
+            invalid={isFieldBad('projectId')}
+          />
         </div>
 
         <div className="flex flex-col">
           <label className="text-[10px] text-gray-500 font-bold mb-0.5">משימה{requiredMark}</label>
-          <select 
-            value={dist.taskId || ''}
-            onChange={(e) => onDistFieldChange(line.id, dist.id, 'taskId', e.target.value)}
-            className={selectClass('taskId')}
-            aria-invalid={missingFields.includes('taskId')}
-          >
-            <option value="">בחר משימה...</option>
-            {data.tasks
-              ?.filter(t => (!dist.projectId || t.projectId === Number(dist.projectId)) && isItemActive(t))
-              .map(t => <option key={t.id} value={t.id}>{t.taskCode}</option>)}
-          </select>
+          <LovCombobox
+            ariaLabel="משימה"
+            items={data.tasks}
+            validItems={availableTasks}
+            value={dist.taskId}
+            text={getLovText(dist, 'taskId')}
+            getCode={t => t.taskCode}
+            getName={t => t.taskName}
+            prefer={t => String(t.projectId) === String(dist.projectId)}
+            onCommit={commitLov('taskId')}
+            placeholder="הקלד משימה..."
+            invalid={isFieldBad('taskId')}
+          />
         </div>
 
         {!isInventory && (
           <>
             <div className="flex flex-col">
               <label className="text-[10px] text-gray-500 font-bold mb-0.5">סוג הוצאה{requiredMark}</label>
-              <select 
-                value={dist.expenditureTypeId || ''}
-                onChange={(e) => onDistFieldChange(line.id, dist.id, 'expenditureTypeId', e.target.value)}
-                className={selectClass('expenditureTypeId')}
-                aria-invalid={missingFields.includes('expenditureTypeId')}
-              >
-                <option value="">בחר סוג הוצאה...</option>
-                {data.expenditureTypes
-                  ?.filter(e => {
-                    if (!isItemActive(e)) return false;
-                    const selectedProject = dist.projectId ? data.projects?.find(p => p.id === Number(dist.projectId)) : null;
-                    if (selectedProject?.allowedExpenditureTypeIds) {
-                      return selectedProject.allowedExpenditureTypeIds.includes(e.id);
-                    }
-                    return true;
-                  })
-                  .map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-              </select>
+              <LovCombobox
+                ariaLabel="סוג הוצאה"
+                items={data.expenditureTypes}
+                validItems={availableExpTypes}
+                value={dist.expenditureTypeId}
+                text={getLovText(dist, 'expenditureTypeId')}
+                getCode={e => e.expenditureTypeCode}
+                getName={e => e.name}
+                getDisplay={e => e.name}
+                onCommit={commitLov('expenditureTypeId')}
+                placeholder="הקלד סוג הוצאה..."
+                invalid={isFieldBad('expenditureTypeId')}
+              />
             </div>
 
             <div className="flex flex-col">
               <label className="text-[10px] text-gray-500 font-bold mb-0.5">יחידה מממנת{requiredMark}</label>
-              <select 
-                value={dist.expenditureOrgId || ''}
-                onChange={(e) => onDistFieldChange(line.id, dist.id, 'expenditureOrgId', e.target.value)}
-                className={selectClass('expenditureOrgId')}
-                aria-invalid={missingFields.includes('expenditureOrgId')}
-              >
-                <option value="">בחר יחידה מממנת...</option>
-                {data.expenditureOrganizations?.filter(isItemActive).map(org => (
-                  <option key={org.id} value={org.id}>{org.name}</option>
-                ))}
-              </select>
+              <LovCombobox
+                ariaLabel="יחידה מממנת"
+                items={data.expenditureOrganizations}
+                validItems={availableExpOrgs}
+                value={dist.expenditureOrgId}
+                text={getLovText(dist, 'expenditureOrgId')}
+                getCode={o => o.name.split(' - ')[0]}
+                getName={o => o.name.split(' - ').slice(1).join(' - ')}
+                getDisplay={o => o.name}
+                onCommit={commitLov('expenditureOrgId')}
+                placeholder="הקלד יחידה מממנת..."
+                invalid={isFieldBad('expenditureOrgId')}
+              />
             </div>
           </>
         )}
       </div>
+
+      {/* --- הסבר על ערכים לא תקינים + הפנייה לכלכלן / סת"ב --- */}
+      {invalidErrors.length > 0 && (
+        <div role="alert" className="flex items-start gap-2 p-2.5 rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-900/20 lg:ms-12">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-rose-500 shrink-0 mt-0.5">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+          </svg>
+          <div className="text-xs text-rose-700 dark:text-rose-300 min-w-0">
+            <ul className="space-y-0.5 font-semibold">
+              {invalidErrors.map(err => <li key={err.field}>{err.message}</li>)}
+            </ul>
+            {needsSetup && <p className="mt-1 font-bold">{BUDGET_SETUP_CONTACT}</p>}
+          </div>
+        </div>
+      )}
 
     </div>
   );

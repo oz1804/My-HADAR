@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import data from '../data/data.json';
 import { validateBudgetForApproval } from '../utils/budgetValidation';
+import { isReqLineOnPo, requisitionHasPo } from '../utils/purchaseOrders';
+import { reserveFunds, releaseFunds, fundsFailureMessage } from '../services/fundsService';
+import { applyDecision, getActionableSteps, stepRoleLabel } from '../utils/approvalEngine';
+import { makeAction, appendActions } from '../utils/actionHistory';
 
 // ==========================================
 // הגדרות קבועות: סטטוסים ופעולות מותרות (State Machine)
@@ -26,21 +30,58 @@ export const REQ_STATUS_ACTIONS = {
 
 export const canDoAction = (status, action) => (REQ_STATUS_ACTIONS[status] || []).includes(action);
 
+// ==========================================
+// ביטול דרישה / שורת דרישה (כמו ב-EBS):
+// - דרישה שאחת מהשורות שלה מקושרת להזמנה - אי אפשר לבטל
+// - שורה בודדת - אפשר לבטל רק אם אין לה הזמנה
+// - ביטול השורה הפעילה האחרונה מבטל את הדרישה כולה
+// ==========================================
+export const isLineCancelled = (line) => line?.cancelFlag === 'Y';
+export const activeLines = (req) => (req?.lines || []).filter(l => !isLineCancelled(l));
+
+export const canCancelRequisition = (req) => !!req && canDoAction(req.status, 'cancel') && !requisitionHasPo(req);
+export const canCancelRequisitionLine = (req, line) =>
+  !!req && !!line && canDoAction(req.status, 'cancel') && !isLineCancelled(line) && !isReqLineOnPo(req, line);
+
+// סכום הדרישה: שורות פעילות בלבד. בדרישה שכל שורותיה בוטלו - הסכום המקורי (לתיעוד)
+const lineAmount = (l) => (Number(l.unitPrice) || 0) * (Number(l.quantity) || 0) * (Number(l.rate) || 1);
+export const computeRequisitionTotal = (lines = []) => {
+  const active = lines.filter(l => !isLineCancelled(l));
+  return (active.length ? active : lines).reduce((sum, l) => sum + lineAmount(l), 0);
+};
+
 const REQ_NUMBER_BASE = 180000;
 
 // --- פונקציות עזר טהורות (ללא סטייט) ---
 
-// טעינת דרישות מה-LocalStorage + המרת סטטוס ישן 'Draft' ל-INCOMPLETE
+// הרכבת הדרישות מהטבלאות הנפרדות ב-data.json (כותרת / שורות / חלוקות) למבנה המקונן שהמערכת עובדת איתו
+const buildSeedRequisitions = () => {
+  const distsByLine = {};
+  (data.requisitionDistributions || []).forEach(d => {
+    (distsByLine[d.requisitionLineId] = distsByLine[d.requisitionLineId] || []).push(d);
+  });
+  const linesByReq = {};
+  (data.requisitionLines || []).forEach(l => {
+    (linesByReq[l.requisitionId] = linesByReq[l.requisitionId] || []).push({ ...l, distributions: distsByLine[l.id] || [] });
+  });
+  return (data.requisitions || []).map(r => ({
+    ...r,
+    header: { description: r.description, justification: r.justification || '', buyerNotes: r.buyerNotes || '' },
+    lines: (linesByReq[r.id] || []).sort((a, b) => a.lineNumber - b.lineNumber)
+  }));
+};
+
+// טעינת דרישות מה-LocalStorage (או מהנתונים הסטטיים בהפעלה ראשונה) + המרת סטטוס ישן 'Draft' ל-INCOMPLETE
 const loadStoredRequisitions = () => {
   const stored = localStorage.getItem('appRequisitions');
-  const list = stored ? JSON.parse(stored) : (data.requisitions || []);
+  const list = stored ? JSON.parse(stored) : buildSeedRequisitions();
   return list.map(r => (r.status === 'Draft' ? { ...r, status: REQ_STATUS.INCOMPLETE } : r));
 };
 
 const getNextRequisitionId = (list) => (list.length > 0 ? Math.max(...list.map(r => r.id)) + 1 : 1);
 
 // בניית אובייקט דרישה מלא משורות העגלה (משמש גם לדרישה חדשה וגם לעדכון דרישה קיימת)
-const buildRequisition = ({ id, requisitionNumber, creationDate, headerData, lines, status, routingSteps, creatorId }) => {
+const buildRequisition = ({ id, requisitionNumber, creationDate, headerData, lines, status, routingSteps, creatorId, actionHistory }) => {
   const now = new Date().toISOString();
 
   const formattedLines = lines.map((line, lIndex) => {
@@ -85,9 +126,10 @@ const buildRequisition = ({ id, requisitionNumber, creationDate, headerData, lin
     creationDate: creationDate || now,
     lastUpdateDate: now,
     creatorId,
-    total: formattedLines.reduce((sum, l) => sum + (l.unitPrice * l.quantity * l.rate), 0),
+    total: computeRequisitionTotal(formattedLines),
     status,
     routingSteps: routingSteps || [],
+    actionHistory: actionHistory || [],
     lines: formattedLines
   };
 };
@@ -96,7 +138,7 @@ const buildRequisition = ({ id, requisitionNumber, creationDate, headerData, lin
 const requisitionLineToCartLine = (line, idx) => {
   const newLineId = Date.now() + idx + Math.random();
   // eslint-disable-next-line no-unused-vars
-  const { requisitionId, ...rest } = line;
+  const { requisitionId, cancelFlag, cancelDate, ...rest } = line;
   return {
     ...rest,
     id: newLineId,
@@ -472,6 +514,24 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     localStorage.setItem('appRequisitions', JSON.stringify(list));
   };
 
+  // עדכון דרישה אחת על בסיס המצב העדכני (לפעולות שמסתיימות אחרי קריאה אסינכרונית לשירות)
+  const patchRequisition = (reqId, fn) => {
+    setRequisitions(prev => {
+      const next = prev.map(r => (r.id === reqId ? fn(r) : r));
+      localStorage.setItem('appRequisitions', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // שחרור שריון התקציב של דרישה + רישום ביומן (אם שוחרר סכום)
+  const releaseAndLog = async (reqId, reason, lineIds = null) => {
+    const { releasedAmount } = await releaseFunds(reqId, { userId: currentUser?.id, reason, lineIds });
+    if (releasedAmount > 0) {
+      patchRequisition(reqId, r => appendActions(r, [makeAction('FUNDS_RELEASE', { userId: currentUser?.id, note: reason, amount: releasedAmount })]));
+    }
+    return releasedAmount;
+  };
+
   // הדרישות של המשתמש המחובר בלבד (מהחדשה לישנה)
   const myRequisitions = currentUser
     ? requisitions
@@ -494,12 +554,15 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     const existing = targetId ? list.find(r => r.id === targetId) : null;
 
     if (existing) {
+      // שורות שבוטלו לא נטענות לסל - שומרים אותן בדרישה כדי לא לאבד את ההיסטוריה
+      const cancelledLines = (existing.lines || []).filter(isLineCancelled);
       const updatedReq = buildRequisition({
         id: existing.id,
         requisitionNumber: existing.requisitionNumber,
         creationDate: existing.creationDate,
         creatorId: existing.creatorId,
-        headerData, lines, status, routingSteps
+        actionHistory: existing.actionHistory,
+        headerData, lines: [...lines, ...cancelledLines], status, routingSteps
       });
       return { list: list.map(r => (r.id === existing.id ? updatedReq : r)), requisition: updatedReq };
     }
@@ -527,29 +590,45 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     }).list;
   };
 
-  // שליחה/שמירה מתוך ה-Checkout: יוצר דרישה חדשה, או מעדכן את הדרישה שבעריכה
-  const handleCheckoutSubmit = (headerData, finalLines, emptyCart, routingSteps = [], status = REQ_STATUS.INCOMPLETE) => {
+  // שליחה/שמירה מתוך ה-Checkout: יוצר דרישה חדשה, או מעדכן את הדרישה שבעריכה.
+  // בשליחה לאישור: בדיקת תקציב ושריון. אם השריון נכשל - הדרישה לא נשמרת ומוחזרת שגיאה
+  const handleCheckoutSubmit = async (headerData, finalLines, emptyCart, routingSteps = [], status = REQ_STATUS.INCOMPLETE) => {
     // הגנה נוספת: אין העברה לסבב אישורים בלי סעיף תקציבי מלא בכל שורות החלוקה
     if (status === REQ_STATUS.IN_PROCESS && validateBudgetForApproval(finalLines).length > 0) {
       showToast('לא ניתן להעביר לסבב: חסר סעיף תקציבי בחלק משורות החלוקה');
-      return false;
+      return { ok: false, message: 'חסר סעיף תקציבי בחלק משורות החלוקה' };
     }
+    const isNew = !editingRequisitionId || !requisitions.some(r => r.id === editingRequisitionId);
     const { list, requisition } = upsertRequisition(requisitions, {
       targetId: editingRequisitionId,
       headerData, lines: finalLines, status, routingSteps
     });
-    persistRequisitions(list);
+
+    const actions = [];
+    if (isNew) actions.push(makeAction('CREATE', { userId: currentUser.id }));
+    if (status === REQ_STATUS.IN_PROCESS) {
+      const funds = await reserveFunds(requisition, currentUser.id);
+      if (!funds.ok) {
+        const failed = funds.check.accounts.filter(a => !a.ok);
+        return { ok: false, message: 'לא ניתן לשריין תקציב', errors: failed.map(fundsFailureMessage) };
+      }
+      actions.push(makeAction('SUBMIT', { userId: currentUser.id }));
+      actions.push(makeAction('FUNDS_RESERVE', { userId: null, amount: funds.reservedAmount }));
+    }
+    const finalReq = appendActions(requisition, actions);
+    persistRequisitions(list.map(r => (r.id === finalReq.id ? finalReq : r)));
 
     if (emptyCart) {
       clearCart();
     } else {
       // הסל נשאר - ממשיכים "לערוך" את אותה דרישה, כך ששמירה נוספת תעדכן אותה ולא תיצור כפילות
       updateCartAndSave(finalLines);
-      setEditingRequisitionId(requisition.id);
+      setEditingRequisitionId(finalReq.id);
     }
 
-    if (status === REQ_STATUS.IN_PROCESS) handleNavigate('success', requisition);
+    if (status === REQ_STATUS.IN_PROCESS) handleNavigate('success', finalReq);
     else handleNavigate('home');
+    return { ok: true, requisition: finalReq };
   };
 
   // מחיקת דרישה (רק בסטטוסים המותרים)
@@ -560,6 +639,7 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
       return false;
     }
     persistRequisitions(requisitions.filter(r => r.id !== reqId));
+    if (req.status === REQ_STATUS.IN_PROCESS) releaseFunds(reqId, { userId: currentUser?.id, reason: 'מחיקת דרישה' });
     // אם מחקנו את הדרישה שבעריכה - הסל הופך לסל של דרישה חדשה
     if (editingRequisitionId === reqId) setEditingRequisitionId(null);
     showToast(`דרישה ${req.requisitionNumber} נמחקה בהצלחה`);
@@ -573,11 +653,53 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
       showToast('לא ניתן לבטל דרישה בסטטוס הנוכחי');
       return false;
     }
-    persistRequisitions(requisitions.map(r =>
-      r.id === reqId ? { ...r, status: REQ_STATUS.CANCELLED, lastUpdateDate: new Date().toISOString() } : r
-    ));
+    if (requisitionHasPo(req)) {
+      showToast('לא ניתן לבטל דרישה שקיימת לה הזמנה. ניתן לבטל רק שורות שטרם הוזמנו');
+      return false;
+    }
+    const now = new Date().toISOString();
+    persistRequisitions(requisitions.map(r => (r.id === reqId ? {
+      ...r,
+      status: REQ_STATUS.CANCELLED,
+      lastUpdateDate: now,
+      lines: (r.lines || []).map(l => (isLineCancelled(l) ? l : { ...l, cancelFlag: 'Y', cancelDate: now }))
+    } : r)).map(r => (r.id === reqId ? appendActions(r, [makeAction('CANCEL', { userId: currentUser?.id })]) : r)));
+    releaseAndLog(reqId, 'ביטול דרישה');
     showToast(`דרישה ${req.requisitionNumber} בוטלה`);
     return true;
+  };
+
+  // ביטול שורת דרישה אחת (רק שורה שאין לה הזמנה). מחזיר { requisitionCancelled } או false
+  const cancelRequisitionLine = (reqId, lineId) => {
+    const req = requisitions.find(r => r.id === reqId);
+    const line = req?.lines?.find(l => l.id === lineId);
+    if (!req || !line || !canDoAction(req.status, 'cancel')) {
+      showToast('לא ניתן לבטל שורות בדרישה בסטטוס הנוכחי');
+      return false;
+    }
+    if (isLineCancelled(line)) return false;
+    if (isReqLineOnPo(req, line)) {
+      showToast('לא ניתן לבטל שורה שקיימת לה הזמנה');
+      return false;
+    }
+    const now = new Date().toISOString();
+    const lines = req.lines.map(l => (l.id === lineId ? { ...l, cancelFlag: 'Y', cancelDate: now } : l));
+    const requisitionCancelled = lines.every(isLineCancelled);
+    persistRequisitions(requisitions.map(r => (r.id === reqId ? {
+      ...r,
+      lines,
+      total: computeRequisitionTotal(lines),
+      status: requisitionCancelled ? REQ_STATUS.CANCELLED : r.status,
+      lastUpdateDate: now
+    } : r)).map(r => (r.id === reqId ? appendActions(r, [
+      makeAction('CANCEL_LINE', { userId: currentUser?.id, lineNumbers: [line.lineNumber] }),
+      requisitionCancelled ? makeAction('CANCEL', { userId: null, note: 'כל שורות הדרישה בוטלו' }) : null
+    ]) : r)));
+    releaseAndLog(reqId, `ביטול שורה ${line.lineNumber}`, [lineId]);
+    showToast(requisitionCancelled
+      ? `כל השורות בוטלו - דרישה ${req.requisitionNumber} בוטלה`
+      : `שורה ${line.lineNumber} בדרישה ${req.requisitionNumber} בוטלה`);
+    return { requisitionCancelled };
   };
 
   // עריכת דרישה: טוען אותה לסל ומעביר ל-Checkout.
@@ -595,15 +717,17 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     }
 
     // דרישה בסבב אישורים נמשכת חזרה לטיוטה וסבב האישורים מתאפס
-    if (target.status === REQ_STATUS.IN_PROCESS) {
+    const isWithdraw = target.status === REQ_STATUS.IN_PROCESS;
+    if (isWithdraw) {
       list = list.map(r => r.id === reqId
-        ? { ...r, status: REQ_STATUS.INCOMPLETE, routingSteps: [], lastUpdateDate: new Date().toISOString() }
+        ? appendActions({ ...r, status: REQ_STATUS.INCOMPLETE, routingSteps: [], lastUpdateDate: new Date().toISOString() }, [makeAction('WITHDRAW', { userId: currentUser?.id })])
         : r
       );
     }
     persistRequisitions(list);
+    if (isWithdraw) releaseAndLog(reqId, 'משיכת הדרישה מסבב האישורים');
 
-    updateCartAndSave(target.lines.map(requisitionLineToCartLine));
+    updateCartAndSave(activeLines(target).map(requisitionLineToCartLine));
     setEditingRequisitionId(reqId);
     showToast(saveCartFirst ? 'הסל הקודם נשמר כטיוטה, והדרישה נטענה לעריכה' : `דרישה ${target.requisitionNumber} נטענה לעריכה`);
     handleNavigate('checkout');
@@ -616,7 +740,9 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     const source = requisitions.find(r => r.id === reqId);
     if (!source) return false;
 
-    const copiedLines = source.lines.map(requisitionLineToCartLine);
+    // מעתיקים רק שורות פעילות; בדרישה שכל שורותיה בוטלו - את כולן
+    const sourceLines = activeLines(source).length ? activeLines(source) : (source.lines || []);
+    const copiedLines = sourceLines.map(requisitionLineToCartLine);
 
     if (mode === 'merge') {
       updateCartAndSave(prev => [...prev, ...copiedLines].map((l, i) => ({ ...l, lineNumber: i + 1 })));
@@ -633,6 +759,40 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     handleNavigate('checkout');
     return true;
   };
+
+  // ==========================================
+  // 9. סבב אישורים - פעולות המאשר
+  // ==========================================
+  // דרישות שממתינות למשתמש המחובר (כמאשר יחיד או כחבר בקבוצת מאשרים)
+  const pendingApprovals = currentUser
+    ? requisitions.filter(r => getActionableSteps(r, currentUser.id).length > 0)
+        .sort((a, b) => new Date(a.lastUpdateDate || a.creationDate) - new Date(b.lastUpdateDate || b.creationDate))
+    : [];
+
+  const decideRequisition = (reqId, decision, note = '') => {
+    const req = requisitions.find(r => r.id === reqId);
+    const result = req && currentUser ? applyDecision(req, currentUser.id, decision, note) : null;
+    if (!result) {
+      showToast('הדרישה אינה ממתינה לאישורך');
+      return false;
+    }
+    // לקבוצה - שם הקבוצה; למאשר יחיד - התפקיד בסבב (שמו כבר מופיע ברישום)
+    const stepTitle = result.steps.filter(s => result.actedStepIds.includes(s.id)).map(stepRoleLabel).join(', ');
+    const now = new Date().toISOString();
+    const finalStatus = result.outcome === 'APPROVED' ? REQ_STATUS.APPROVED : result.outcome === 'REJECTED' ? REQ_STATUS.REJECTED : REQ_STATUS.IN_PROCESS;
+    const updated = appendActions({ ...req, routingSteps: result.steps, status: finalStatus, lastUpdateDate: now }, [
+      makeAction(decision === 'approve' ? 'APPROVE' : 'REJECT', { userId: currentUser.id, note, stepTitle }),
+      result.outcome === 'APPROVED' ? makeAction('FINAL_APPROVE', { userId: null, note: 'כל המאשרים אישרו. השריון נשאר בתוקף.' }) : null
+    ]);
+    persistRequisitions(requisitions.map(r => (r.id === reqId ? updated : r)));
+    if (result.outcome === 'REJECTED') releaseAndLog(reqId, 'דחיית הדרישה');
+    showToast(result.outcome === 'APPROVED'
+      ? `דרישה ${req.requisitionNumber} אושרה סופית`
+      : result.outcome === 'REJECTED' ? `דרישה ${req.requisitionNumber} נדחתה והשריון שוחרר` : `אישרת את דרישה ${req.requisitionNumber}`);
+    return result.outcome;
+  };
+  const approveRequisition = (reqId, note) => decideRequisition(reqId, 'approve', note);
+  const rejectRequisition = (reqId, note) => decideRequisition(reqId, 'reject', note);
 
   const resetAppData = () => {
     setCartLines([]);
@@ -680,8 +840,12 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     handleCheckoutSubmit,
     deleteRequisition,
     cancelRequisition,
+    cancelRequisitionLine,
     startEditRequisition,
     copyRequisitionToCart,
+    pendingApprovals,
+    approveRequisition,
+    rejectRequisition,
     resetAppData
   };
 }

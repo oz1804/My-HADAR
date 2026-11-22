@@ -58,7 +58,7 @@ export default function NavSearch({ onNavigate }) {
   };
 
   return (
-    <div className="relative group flex-1 w-full min-w-0 md:min-w-[200px] xl:min-w-[300px]" ref={dropdownRef}>
+    <div className="relative group flex-1 w-full min-w-0 md:min-w-[140px] xl:min-w-[200px]" ref={dropdownRef}>
       <form onSubmit={handleSubmit} className="relative w-full">
         
         {/* אייקון חיפוש פנימי */}

@@ -59,7 +59,7 @@ function CartNotice({ cartCount, editingNumber }) {
   );
 }
 
-export default function RequisitionActionModals({ modal, onClose, cartCount, editingNumber, onConfirmEdit, onConfirmCopy, onConfirmDelete, onConfirmCancel }) {
+export default function RequisitionActionModals({ modal, onClose, cartCount, editingNumber, onConfirmEdit, onConfirmCopy, onConfirmDelete, onConfirmCancel, onConfirmCancelLine }) {
   if (!modal) return null;
   const { type, requisition } = modal;
   const reqNumber = <span className="font-mono font-bold text-gray-800 dark:text-gray-200">{requisition.requisitionNumber}</span>;
@@ -158,6 +158,32 @@ export default function RequisitionActionModals({ modal, onClose, cartCount, edi
   }
 
   // --- ביטול דרישה ---
+  // --- ביטול שורת דרישה ---
+  if (type === 'cancelLine') {
+    const { line, isLastActiveLine } = modal;
+    return (
+      <ModalShell onClose={onClose} iconName="cancel" iconClass="bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" title="ביטול שורת דרישה">
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          האם לבטל את שורה {line.lineNumber} בדרישה {reqNumber}? השורה תישאר בדרישה לתיעוד, אך לא תוזמן ולא תיכלל בסכום הדרישה.
+        </p>
+        <div className="p-3 mb-4 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700 text-sm">
+          <div className="font-bold text-gray-900 dark:text-white truncate">{line.itemDescription}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{Number(line.quantity).toLocaleString()} יח' · {line.sku}</div>
+        </div>
+        {isLastActiveLine && (
+          <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 mb-4 flex gap-2">
+            <Icon name="warning" className="w-4 h-4 shrink-0 mt-0.5" />
+            זו השורה הפעילה האחרונה בדרישה - ביטולה יבטל את הדרישה כולה.
+          </p>
+        )}
+        <div className="flex flex-col gap-3 mt-4">
+          <button onClick={onConfirmCancelLine} className="w-full py-3 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600 transition-colors cursor-pointer">בטל שורה</button>
+          <button onClick={onClose} className={btnGhost}>חזור</button>
+        </div>
+      </ModalShell>
+    );
+  }
+
   if (type === 'cancel') {
     return (
       <ModalShell onClose={onClose} iconName="cancel" iconClass="bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" title="ביטול דרישה">
