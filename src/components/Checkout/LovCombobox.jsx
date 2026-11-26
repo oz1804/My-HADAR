@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 // ==========================================
 // שדה טקסט חופשי עם רשימת ערכים (LOV) שנפתחת תוך כדי הקלדה.
@@ -24,16 +24,21 @@ export default function LovCombobox({
   getCode,               // קוד הערך (למשל projectCode)
   getName = () => '',    // שם הערך
   getDisplay,            // מה מוצג בשדה כשנבחר ערך
+  getMeta,               // עמודה שלישית ברשימה (למשל תאריך הסיום של הפרויקט / המשימה)
+  metaLabel = '',        // תיאור העמודה השלישית (לטולטיפ)
+  columns,               // כותרות העמודות ברשימה, כשיש עמודה שלישית: [קוד, שם, נוסף]
   prefer,                // (item) => boolean - עדיפות כשכמה ערכים עם אותו קוד (למשל משימה של הפרויקט שנבחר)
   onCommit,              // ({ value, text }) => void
   placeholder = '',
   invalid = false,
+  toneClass = '',        // מסגרת לפי הודעת ולידציה (חוסמת / אזהרה / מידע)
   size = 'sm',
   ariaLabel
 }) {
   const sz = SIZES[size] || SIZES.sm;
   const listId = useId();
   const inputRef = useRef(null);
+  const listRef = useRef(null);
   const [isEditing, setIsEditing] = useState(false);
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -106,10 +111,25 @@ export default function LovCombobox({
     }
   };
 
+  // הרשימה רחבה מהשדה: אם היא חורגת מקצה המסך (בעיקר בנייד) מזיזים אותה פנימה
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!isOpen || !el) return;
+    el.style.translate = '';
+    const r = el.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    const margin = 8;
+    let dx = 0;
+    if (r.left < margin) dx = margin - r.left;
+    else if (r.right > vw - margin) dx = vw - margin - r.right;
+    if (dx) el.style.translate = `${dx}px 0`;
+  }, [isOpen, options]);
+
   const borderClass = invalid
     ? 'border-rose-400 dark:border-rose-600 bg-rose-50 dark:bg-rose-900/20 ring-1 ring-rose-200 dark:ring-rose-900/40'
     : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800';
   const activeId = isOpen && options[highlight] ? `${listId}-opt-${options[highlight].id}` : undefined;
+  const withMeta = typeof getMeta === 'function';
 
   return (
     <div className="relative w-full">
@@ -137,7 +157,7 @@ export default function LovCombobox({
         onChange={(e) => { setIsEditing(true); setQuery(e.target.value); setIsOpen(true); setHighlight(0); }}
         onBlur={() => { if (isEditing) commit(query); }}
         onKeyDown={onKeyDown}
-        className={`w-full border outline-none focus:border-blue-500 transition-colors ${sz.input} ${borderClass}`}
+        className={`w-full border outline-none focus:border-blue-500 transition-colors ${sz.input} ${borderClass} ${toneClass}`}
       />
       <button
         type="button"
@@ -154,15 +174,40 @@ export default function LovCombobox({
 
       {isOpen && (
         <ul
+          ref={listRef}
           id={listId}
           role="listbox"
-          className={`absolute z-40 top-full mt-1 start-0 min-w-full w-max max-w-[min(22rem,85vw)] max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg py-1 ${sz.list}`}
+          className={`absolute z-40 top-full mt-1 start-0 min-w-full w-max ${withMeta ? 'grid grid-cols-[auto_minmax(0,1fr)_auto] max-w-[min(34rem,92vw)]' : 'max-w-[min(22rem,85vw)]'} max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg ${withMeta && columns ? 'pb-1' : 'py-1'} ${sz.list}`}
         >
+          {withMeta && columns && options.length > 0 && (
+            <li role="presentation" aria-hidden="true" className={`col-span-3 grid grid-cols-subgrid gap-x-3 sticky top-0 z-10 ${sz.option} py-1! text-[10px] font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700`}>
+              {columns.map(c => <span key={c} className="whitespace-nowrap">{c}</span>)}
+            </li>
+          )}
           {options.length === 0 ? (
-            <li className={`${sz.option} text-gray-500 dark:text-gray-400`}>אין ערך תואם ברשימה</li>
+            <li className={`${withMeta ? 'col-span-3' : ''} ${sz.option} text-gray-500 dark:text-gray-400`}>אין ערך תואם ברשימה</li>
           ) : (
             options.map((item, idx) => {
               const isSelected = selectedItem && item.id === selectedItem.id;
+              const rowClass = `${sz.option} cursor-pointer ${idx === highlight ? 'bg-blue-50 dark:bg-blue-900/30' : ''} ${isSelected ? 'font-bold' : ''}`;
+              if (withMeta) {
+                const meta = getMeta(item);
+                return (
+                  <li
+                    key={item.id}
+                    id={`${listId}-opt-${item.id}`}
+                    role="option"
+                    aria-selected={isSelected}
+                    onMouseDown={(e) => { e.preventDefault(); choose(item); }}
+                    onMouseEnter={() => setHighlight(idx)}
+                    className={`col-span-3 grid grid-cols-subgrid gap-x-3 items-baseline ${rowClass}`}
+                  >
+                    <span className="font-mono font-bold text-gray-900 dark:text-white whitespace-nowrap"><bdi dir="ltr">{getCode(item)}</bdi></span>
+                    <span className="text-gray-600 dark:text-gray-300 line-clamp-2">{getName(item)}</span>
+                    <span dir="ltr" className="text-end text-gray-500 dark:text-gray-400 whitespace-nowrap tabular-nums" title={meta && metaLabel ? `${metaLabel}: ${meta}` : undefined}>{meta || 'ללא'}</span>
+                  </li>
+                );
+              }
               return (
                 <li
                   key={item.id}
@@ -171,9 +216,9 @@ export default function LovCombobox({
                   aria-selected={isSelected}
                   onMouseDown={(e) => { e.preventDefault(); choose(item); }}
                   onMouseEnter={() => setHighlight(idx)}
-                  className={`${sz.option} flex items-baseline gap-2 cursor-pointer ${idx === highlight ? 'bg-blue-50 dark:bg-blue-900/30' : ''} ${isSelected ? 'font-bold' : ''}`}
+                  className={`flex items-baseline gap-2 ${rowClass}`}
                 >
-                  <span className="font-mono font-bold text-gray-900 dark:text-white whitespace-nowrap">{getCode(item)}</span>
+                  <span className="font-mono font-bold text-gray-900 dark:text-white whitespace-nowrap"><bdi dir="ltr">{getCode(item)}</bdi></span>
                   {getName(item) && getName(item) !== getCode(item) && (
                     <span className="text-gray-500 dark:text-gray-400 truncate">{getName(item)}</span>
                   )}

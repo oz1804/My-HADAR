@@ -14,5 +14,7 @@ export const getApprovalConfig = () => respond({
   users: data.users.map(({ id, username, firstName, lastName, job }) => ({ id, username, firstName, lastName, job })),
   buyers: data.buyers || [],
   inventoryOrganizations: data.inventoryOrganizations || [],
+  // אנשי מפתח בפרויקט (כמו Key Members ב-EBS Projects) - לחוקים שמושכים מאשר מהפרויקט
+  projects: (data.projects || []).map(({ id, projectCode, projectName, primaryPlannerUserId }) => ({ id, projectCode, projectName, primaryPlannerUserId })),
   catalogItems: (data.catalogItems || []).map(({ id, hasMemory, hasRadiation, isClassified, hasAcidBattery }) => ({ id, hasMemory, hasRadiation, isClassified, hasAcidBattery }))
 });

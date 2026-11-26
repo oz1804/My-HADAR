@@ -28,7 +28,9 @@ export const OPERATORS = {
   GTE: 'גדול או שווה ל',
   LT: 'קטן מ',
   LTE: 'קטן או שווה ל',
-  STARTS_WITH: 'מתחיל ב'
+  STARTS_WITH: 'מתחיל ב',
+  IS_EMPTY: 'ריק',
+  IS_NOT_EMPTY: 'לא ריק'
 };
 
 // בשלב זה ממומשת רק השיטה הזו (First Responder Wins ב-AME)
@@ -111,8 +113,95 @@ const ruleDetail = (rule, attrs, config) => {
 };
 
 // ==========================================
+// אנשי מפתח בפרויקט (Key Members ב-EBS) כמאשרים
+// חוק מסוג ADD_PROJECT_KEY_MEMBER מושך מכל פרויקט בחלוקות את בעל התפקיד בפרויקט (למשל Primary Planner)
+// כצעד של מאשר יחיד שהמבקש יכול להזיז או להסיר. אין התחייבות שהוא חבר בקבוצת המאשרים,
+// ולכן החברות נבדקת בנפרד (ולידציות מסך "סבב מאשרים")
+// ==========================================
+export const KEY_MEMBER_ACTION = 'ADD_PROJECT_KEY_MEMBER';
+// קוד באנגלית בתוך משפט בעברית (למשל *12345 או UMX|...) - מבודד כדי שהסימנים לא יקפצו לצד השני
+const ltr = (text) => `\u2066${text}\u2069`;
+export const PROJECT_ROLES = {
+  PRIMARY_PLANNER: { label: 'Primary Planner', field: 'primaryPlannerUserId' }
+};
+
+// חבר פעיל באחד מתפקידי ה-UMX של הקבוצה
+export const isGroupMember = (userId, groupCode, config, date = todayIso()) => {
+  const group = config.approverGroups.find(g => g.code === groupCode);
+  if (!group || userId == null) return false;
+  return (group.roleMappings || []).some(m => getRoleMemberIds(m.roleCode, config, date).some(id => same(id, userId)));
+};
+
+// שם הקבוצה והתפקיד שהחברות בה נדרשת: 'ממוני כספים (UMX|HADAR_FIN_APPROVER)'
+export const groupRoleLabel = (groupCode, config) => {
+  const group = config.approverGroups.find(g => g.code === groupCode);
+  if (!group) return groupCode;
+  const roles = [...new Set((group.roleMappings || []).map(m => m.roleCode))];
+  return roles.length ? `"${group.name}" (${roles.map(ltr).join(', ')})` : `"${group.name}"`;
+};
+
+// הקבוצות שהחוקים הפעילים מחייבים לכלול בסבב (בשלב זה: ממוני כספים)
+export const requiredStepGroups = (config, date = todayIso()) =>
+  [...new Set(config.approvalRules
+    .filter(r => r.enabled !== false && isEffective(r, date) && r.action?.type === KEY_MEMBER_ACTION)
+    .map(r => r.action.groupCode))];
+
+// צעד בסבב שנחשב כמאשר מהקבוצה: צעד שסומן כך (נמשך מהפרויקט או נוסף ידנית) או צעד קבוצה
+export const isStepOfGroup = (step, groupCode) =>
+  step.requiredGroupCode === groupCode || (step.kind === 'GROUP' && step.groupCode === groupCode);
+
+export const suggestKeyMemberSteps = ({ lines, headerOrg = null, requesterId, config, date = todayIso() }) => {
+  const active = (lines || []).filter(isActiveLine);
+  const headerAttrs = getHeaderAttributes(active);
+  const steps = {};
+  config.approvalRules
+    .filter(r => r.enabled !== false && isEffective(r, date) && r.action?.type === KEY_MEMBER_ACTION)
+    .forEach(rule => {
+      const role = PROJECT_ROLES[rule.action.projectRole];
+      const group = config.approverGroups.find(g => g.code === rule.action.groupCode);
+      if (!role) return;
+      active.forEach(line => {
+        const attrs = getLineAttributes(line, config, headerOrg);
+        if (rule.level !== 'HEADER' && !ruleMatches(rule, { ...headerAttrs, ...attrs })) return;
+        if (rule.level === 'HEADER' && !ruleMatches(rule, headerAttrs)) return;
+        attrs.PROJECT.forEach(projectId => {
+          const project = (config.projects || []).find(p => same(p.id, projectId));
+          const userId = project?.[role.field];
+          if (!project || userId == null || same(userId, requesterId)) return;
+          const user = config.users.find(u => same(u.id, userId));
+          if (!user) return;
+          const key = `${rule.action.groupCode}-${userId}`;
+          if (!steps[key]) {
+            steps[key] = {
+              id: `keymember-${key}`,
+              kind: 'USER',
+              source: 'KEY_MEMBER',
+              editable: rule.action.editable !== false,
+              requiredGroupCode: rule.action.groupCode,
+              userId: user.id,
+              // מי שלא חבר בקבוצה נשאר בסבב, אבל לא מוצג כממונה הכספים
+              title: isGroupMember(user.id, rule.action.groupCode, config, date)
+                ? (rule.action.stepTitle || group?.name || 'אישור לפי חוק')
+                : `אישור ${role.label}`,
+              name: userDisplayName(user),
+              role: user.job || '',
+              reasons: [{ ruleId: rule.id, ruleName: rule.name, projects: [], lineNumbers: [] }],
+              status: 'pending'
+            };
+          }
+          const reason = steps[key].reasons[0];
+          if (!reason.projects.includes(project.projectCode)) reason.projects.push(project.projectCode);
+          if (line.lineNumber && !reason.lineNumbers.includes(line.lineNumber)) reason.lineNumbers.push(line.lineNumber);
+          reason.detail = `${role.label} ב${reason.projects.length > 1 ? 'פרויקטים' : 'פרויקט'} ${reason.projects.map(ltr).join(', ')}`;
+        });
+      });
+    });
+  return Object.values(steps);
+};
+
+// ==========================================
 // בניית רשימת המאשרים
-// manualSteps: מאשרים שהמשתמש בחר (מועדפים / ממונה / נוסף) - ראשונים, לפי הסדר שקבע
+// manualSteps: מאשרים שהמשתמש בחר (מועדפים / ממונה / נוסף / ממונה הכספים מהפרויקט) - ראשונים, לפי הסדר שקבע
 // אחריהם קבוצות לפי החוקים (לפי position; אותו position = במקביל), ובסוף הקניינים
 // ==========================================
 export const buildApprovalList = ({ lines, headerOrg = null, headerBuyer = null, requesterId, config, manualSteps = [], date = todayIso() }) => {
@@ -168,6 +257,7 @@ export const buildApprovalList = ({ lines, headerOrg = null, headerBuyer = null,
   };
 
   rules.forEach(rule => {
+    // חוקי אנשי מפתח בפרויקט לא נכנסים כאן: הם מוצעים כצעדים שהמבקש יכול להזיז (suggestKeyMemberSteps)
     if (rule.action?.type !== 'ADD_APPROVER_GROUP') return;
     if (rule.level === 'HEADER') {
       if (ruleMatches(rule, headerAttrs)) addGroup(rule, rule.action.orgSource === 'HEADER' ? headerOrg : null, {});

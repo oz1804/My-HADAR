@@ -1,8 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import data from '../data/data.json';
+import { StatusBadge } from './Requisitions/RequisitionUiParts';
 
-// 1. הוספתי את onNavigate לחתימה
-export default function NavCart({ cartLines = [], onUpdateQty, onNavigate }) {
+const LOCK_PATH = 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z';
+
+// editingRequisition: הדרישה שנטענה לסל לעריכה - כל מה שמוסיפים לסל נכנס אליה (ולא לדרישה חדשה)
+// lockedLines: בדרישה שאושרה והוחזרה - השורות שאושרו, מוצגות בסל לקריאה בלבד
+export default function NavCart({ cartLines = [], onUpdateQty, onNavigate, editingRequisition = null, lockedLines = [] }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -20,7 +24,11 @@ export default function NavCart({ cartLines = [], onUpdateQty, onNavigate }) {
     };
   });
 
-  const cartTotal = enrichedCartItems.reduce((sum, item) => sum + ((item.unitPrice || 0) * item.quantity), 0);
+  const lineTotal = (l) => (l.unitPrice || 0) * l.quantity;
+  const cartTotal = [...lockedLines, ...enrichedCartItems].reduce((sum, item) => sum + lineTotal(item), 0);
+  const isEditing = !!editingRequisition;
+  const isAmend = lockedLines.length > 0;
+  const totalCount = cartLines.length + lockedLines.length;
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -35,9 +43,9 @@ export default function NavCart({ cartLines = [], onUpdateQty, onNavigate }) {
       <button onClick={() => setIsOpen(!isOpen)} className="flex flex-col items-center justify-center gap-1 p-1 md:p-1.5 xl:px-2 xl:py-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer group" title="עגלת קניות">
         <div className="relative mt-1">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" /></svg>
-          {cartLines.length > 0 && (
+          {totalCount > 0 && (
             <span className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-gradient-to-br from-blue-500 to-indigo-600 border-2 border-white dark:border-gray-800 rounded-full shadow-sm z-10">
-              {cartLines.length}
+              {totalCount}
             </span>
           )}
         </div>
@@ -48,19 +56,50 @@ export default function NavCart({ cartLines = [], onUpdateQty, onNavigate }) {
         <div className="absolute top-full mt-3 w-[300px] sm:w-[380px] bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-[60] left-0 sm:end-0 sm:left-auto flex flex-col transition-all">
           <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex justify-between items-center">
             <span className="font-bold text-gray-900 dark:text-white">הסל שלי</span>
-            {cartLines.length > 0 && <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-md">{cartLines.length} שורות</span>}
+            {totalCount > 0 && <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-md">{totalCount} שורות</span>}
           </div>
 
-          {cartLines.length === 0 ? (
+          {/* לאיזו דרישה הסל שייך */}
+          <div data-testid="cart-requisition" className={`px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-2 text-xs ${isEditing ? 'bg-blue-50/70 dark:bg-blue-900/20' : ''}`}>
+            {isEditing ? (
+              <>
+                <span className="font-bold text-blue-800 dark:text-blue-200 min-w-0 truncate">
+                  {isAmend ? 'הוספת שורות לדרישה' : 'עריכת דרישה'} <span className="font-mono">{editingRequisition.requisitionNumber}</span>
+                </span>
+                <StatusBadge status={editingRequisition.status} />
+              </>
+            ) : (
+              <span className="font-semibold text-gray-500 dark:text-gray-400">דרישה חדשה</span>
+            )}
+          </div>
+
+          {totalCount === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 px-6 text-center">
               <div className="w-16 h-16 bg-gray-50 dark:bg-gray-700/50 rounded-full flex items-center justify-center mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-gray-400 dark:text-gray-500"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" /></svg>
               </div>
               <span className="text-base font-bold text-gray-700 dark:text-gray-300 mb-1">סל הדרישה שלך ריק</span>
-              <span className="text-sm text-gray-500 dark:text-gray-400">פריטים שתבחר מהקטלוג יופיעו כאן.</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">{isEditing ? `פריטים שתבחר מהקטלוג ייכנסו לדרישה ${editingRequisition.requisitionNumber}.` : 'פריטים שתבחר מהקטלוג יופיעו כאן.'}</span>
             </div>
           ) : (
             <ul className="max-h-[340px] overflow-y-auto divide-y divide-gray-50 dark:divide-gray-700/50 custom-scrollbar">
+              {lockedLines.map((item) => (
+                <li key={item.id} data-testid="cart-locked-line" className="p-4 bg-gray-50/60 dark:bg-gray-900/30">
+                  <div className="flex justify-between items-center gap-3">
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <span className="text-sm font-bold text-gray-700 dark:text-gray-300 truncate" title={item.itemDescription}>{item.itemDescription}</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5"><span className="font-mono">מק"ט: {item.sku}</span> · שורה שאושרה</span>
+                    </div>
+                    <div className="flex flex-col items-end shrink-0 text-start min-w-[70px]">
+                      <span className="text-sm font-bold text-gray-700 dark:text-gray-300">₪{lineTotal(item).toLocaleString()}</span>
+                      <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mt-0.5">כמות: {item.quantity}</span>
+                    </div>
+                    <span className="p-2 text-gray-400 dark:text-gray-500 shrink-0" title="שורה שאושרה - לא ניתן לערוך">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d={LOCK_PATH} /></svg>
+                    </span>
+                  </div>
+                </li>
+              ))}
               {enrichedCartItems.map((item) => (
                 <li key={item.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group/item">
                   <div className="flex justify-between items-center gap-3">
@@ -97,7 +136,7 @@ export default function NavCart({ cartLines = [], onUpdateQty, onNavigate }) {
             </ul>
           )}
 
-          {cartLines.length > 0 && (
+          {(totalCount > 0 || isEditing) && (
             <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
               <div className="flex justify-between items-end mb-4 px-1">
                 <span className="text-sm font-bold text-gray-600 dark:text-gray-400">סך הדרישה (בסיס):</span>

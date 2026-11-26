@@ -1,3 +1,4 @@
+import { isAmendment } from '../../hooks/useAppData';
 import { useEffect } from 'react';
 import { Icon } from './RequisitionUiParts';
 
@@ -69,13 +70,13 @@ export default function RequisitionActionModals({ modal, onClose, cartCount, edi
     return (
       <ModalShell onClose={onClose} iconName="edit" iconClass="bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" title="יש פריטים בסל">
         <p className="text-gray-600 dark:text-gray-400 mb-4">
-          כדי לערוך את דרישה {reqNumber} היא תיטען לסל. האם לשמור את הסל הנוכחי כטיוטה לעריכה בפעם אחרת?
+          כדי {isAmendment(requisition) ? 'להוסיף שורות לדרישה' : 'לערוך את דרישה'} {reqNumber} היא תיטען לסל. האם לשמור את הסל הנוכחי כטיוטה לעריכה בפעם אחרת?
         </p>
         <CartNotice cartCount={cartCount} editingNumber={editingNumber} />
         {requisition.status === 'IN PROCESS' && (
           <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 mb-6 flex gap-2">
             <Icon name="warning" className="w-4 h-4 shrink-0 mt-0.5" />
-            הדרישה תימשך מסבב האישורים ותחזור לסטטוס טיוטה.
+            {isAmendment(requisition) ? 'הדרישה תימשך מסבב האישורים ותחזור לסטטוס "הוחזרה מקניין".' : 'הדרישה תימשך מסבב האישורים ותחזור לסטטוס טיוטה.'}
           </p>
         )}
         <div className="flex flex-col gap-3">
@@ -92,7 +93,7 @@ export default function RequisitionActionModals({ modal, onClose, cartCount, edi
     return (
       <ModalShell onClose={onClose} iconName="warning" iconClass="bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" title="משיכת הדרישה מהסבב">
         <p className="text-gray-600 dark:text-gray-400 mb-8">
-          דרישה {reqNumber} נמצאת כרגע בסבב אישורים. עריכה תמשוך אותה מהסבב ותחזיר אותה לסטטוס טיוטה. לאחר העריכה יהיה צורך לשלוח אותה לסבב מחדש.
+          דרישה {reqNumber} נמצאת כרגע בסבב אישורים. עריכה תמשוך אותה מהסבב ותחזיר אותה לסטטוס {isAmendment(requisition) ? '"הוחזרה מקניין"' : 'טיוטה'}. לאחר העריכה יהיה צורך לשלוח אותה לסבב מחדש.
         </p>
         <div className="flex flex-col gap-3">
           <button onClick={() => onConfirmEdit(false)} className={btnPrimary}>משוך וערוך</button>

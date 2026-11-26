@@ -3,13 +3,15 @@ import data from '../../data/data.json';
 import { getApprovalConfig } from '../../services/approvalConfigService';
 import { getBalances, getLedger } from '../../services/fundsService';
 import { isEffective } from '../../services/storage';
-import { ATTRIBUTES, OPERATORS, VOTING_METHODS, getRoleMemberIds, userDisplayName } from '../../utils/approvalEngine';
+import { ATTRIBUTES, OPERATORS, VOTING_METHODS, KEY_MEMBER_ACTION, PROJECT_ROLES, groupRoleLabel, getRoleMemberIds, userDisplayName } from '../../utils/approvalEngine';
 import { ACTION_CODES } from '../../utils/actionHistory';
 import { Icon } from '../Requisitions/RequisitionUiParts';
+import ValidationsAdmin from './ValidationsAdmin';
 import { formatMoney, formatDate, formatDateTime } from '../Requisitions/requisitionUi';
 
 const TABS = [
   { id: 'rules', label: 'חוקי סבב' },
+  { id: 'validations', label: 'ולידציות' },
   { id: 'groups', label: 'קבוצות מאשרים' },
   { id: 'roles', label: 'תפקידי UMX' },
   { id: 'classes', label: 'סיווגי פריטים' },
@@ -46,7 +48,7 @@ const orgName = (id) => {
 // ==========================================
 // מסך ניהול מערכת - קריאה בלבד בשלב זה (עריכת ההגדרות - בשלב הבא)
 // ==========================================
-export default function AdminConsole({ requisitions, onBackToHome }) {
+export default function AdminConsole({ requisitions, currentUser, onBackToHome }) {
   const [tab, setTab] = useState('rules');
   const [config, setConfig] = useState(null);
   const [balances, setBalances] = useState([]);
@@ -85,7 +87,7 @@ export default function AdminConsole({ requisitions, onBackToHome }) {
             ניהול מערכת
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 font-medium">
-            הגדרות סבב האישורים, תפקידי UMX, יתרות התקציב ויומן הפעולות.
+            הגדרות סבב האישורים, ולידציות, תפקידי UMX, יתרות התקציב ויומן הפעולות.
           </p>
         </div>
         <button onClick={onBackToHome} className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-xl font-bold transition-colors cursor-pointer shrink-0 shadow-sm">
@@ -96,7 +98,9 @@ export default function AdminConsole({ requisitions, onBackToHome }) {
 
       <div className="flex items-start gap-2 p-3 mb-5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-xs font-semibold text-amber-800 dark:text-amber-200">
         <Icon name="warning" className="w-4 h-4 shrink-0" />
-        בשלב זה ההגדרות לקריאה בלבד ונטענות מ-data.json. עריכת חוקים, קבוצות ושיוכים תתאפשר בשלב מסכי הניהול.
+        {tab === 'validations'
+          ? 'הוולידציות נשמרות בשלב זה בדפדפן. בחיבור ל-EBS הן יישמרו בטבלת Custom דרך ה-API.'
+          : 'חוקי הסבב, הקבוצות והשיוכים לקריאה בלבד ונטענים מ-data.json. עריכתם תתאפשר בשלב מסכי הניהול.'}
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1 mb-5 custom-scrollbar" role="tablist">
@@ -135,7 +139,11 @@ export default function AdminConsole({ requisitions, onBackToHome }) {
                       </div>
                       <div>
                         <div className="font-bold text-gray-500 dark:text-gray-400 mb-0.5">פעולה</div>
-                        <div className="text-gray-800 dark:text-gray-200">הוספת קבוצת "{group?.name || rule.action?.groupCode}" · {ORG_SOURCE[rule.action?.orgSource] || ''}</div>
+                        <div className="text-gray-800 dark:text-gray-200">
+                          {rule.action?.type === KEY_MEMBER_ACTION
+                            ? `הוספת ה-${PROJECT_ROLES[rule.action.projectRole]?.label || rule.action.projectRole} של הפרויקט כמאשר · נחשב כממונה הכספים רק אם הוא חבר בקבוצת ${groupRoleLabel(rule.action.groupCode, config)}; אחרת נשאר בסבב, ונדרש גם ממונה כספים מהקבוצה${rule.action.editable !== false ? ' · המבקש יכול להזיז או להסיר אותו' : ''}`
+                            : `הוספת קבוצת "${group?.name || rule.action?.groupCode}" · ${ORG_SOURCE[rule.action?.orgSource] || ''}`}
+                        </div>
                       </div>
                       <div>
                         <div className="font-bold text-gray-500 dark:text-gray-400 mb-0.5">תוקף</div>
@@ -146,6 +154,10 @@ export default function AdminConsole({ requisitions, onBackToHome }) {
                 );
               })}
             </div>
+          )}
+
+          {tab === 'validations' && (
+            <ValidationsAdmin currentUser={currentUser} />
           )}
 
           {tab === 'groups' && (

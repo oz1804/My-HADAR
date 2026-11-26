@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import data from '../data/data.json';
-import { validateBudgetForApproval } from '../utils/budgetValidation';
+import { validateCheckout, runScreen } from '../utils/validationEngine';
+import { routingContext } from '../utils/validationScreens';
+import { loadValidationRulesSync } from '../services/validationService';
 import { isReqLineOnPo, requisitionHasPo } from '../utils/purchaseOrders';
 import { reserveFunds, releaseFunds, fundsFailureMessage } from '../services/fundsService';
 import { applyDecision, getActionableSteps, stepRoleLabel } from '../utils/approvalEngine';
@@ -28,7 +30,35 @@ export const REQ_STATUS_ACTIONS = {
   'CANCELLED':  ['view', 'copy']
 };
 
-export const canDoAction = (status, action) => (REQ_STATUS_ACTIONS[status] || []).includes(action);
+// ==========================================
+// דרישה שאושרה והוחזרה מקניין (כמו ב-EBS):
+// - השורות שאושרו נעולות: אי אפשר לערוך אותן, רק לבטל שורה שלא מקושרת להזמנה
+// - אפשר להוסיף שורות חדשות, והדרישה כולה עוברת סבב אישורים מחדש
+// - דרישה כזו לא נמחקת בשום סטטוס (גם אם הסבב החדש נדחה או נמשך)
+// ==========================================
+const APPROVED_STATUSES = ['APPROVED', 'RETURNED'];
+export const isLineApproved = (req, line) =>
+  !!line && (line.approvedFlag === 'Y' || (APPROVED_STATUSES.includes(req?.status) && line.approvedFlag !== 'N'));
+export const hasApprovedLines = (req) => (req?.lines || []).some(l => isLineApproved(req, l));
+// השורות הנעולות שמוצגות בסל לקריאה בלבד (מאושרות ולא מבוטלות)
+export const lockedLinesOf = (req) => (req?.lines || []).filter(l => isLineApproved(req, l) && !isLineCancelled(l));
+
+const unapprovedLineIds = (req) => (req?.lines || []).filter(l => !isLineApproved(req, l)).map(l => l.id);
+// סטטוס לשמירה בלי שליחה: דרישה שאושרה נשארת בסטטוס שלה, אחרת טיוטה
+const draftStatusFor = (req) => (isAmendment(req) && req.status !== REQ_STATUS.IN_PROCESS ? req.status : REQ_STATUS.INCOMPLETE);
+
+// הפעולות המותרות לדרישה מסוימת: לפי הסטטוס, ובדרישה שאושרה - בלי מחיקה, ועם ביטול גם אחרי דחייה
+export const getRequisitionActions = (req) => {
+  const base = REQ_STATUS_ACTIONS[req?.status] || [];
+  if (!hasApprovedLines(req)) return base;
+  const actions = base.filter(a => a !== 'delete');
+  return req.status === REQ_STATUS.REJECTED ? [...actions, 'cancel'] : actions;
+};
+// אפשר להעביר דרישה (עדיף) או סטטוס
+export const canDoAction = (reqOrStatus, action) =>
+  (typeof reqOrStatus === 'object' && reqOrStatus !== null ? getRequisitionActions(reqOrStatus) : (REQ_STATUS_ACTIONS[reqOrStatus] || [])).includes(action);
+// "עריכה" של דרישה שאושרה היא הוספת שורות
+export const isAmendment = (req) => hasApprovedLines(req);
 
 // ==========================================
 // ביטול דרישה / שורת דרישה (כמו ב-EBS):
@@ -39,9 +69,9 @@ export const canDoAction = (status, action) => (REQ_STATUS_ACTIONS[status] || []
 export const isLineCancelled = (line) => line?.cancelFlag === 'Y';
 export const activeLines = (req) => (req?.lines || []).filter(l => !isLineCancelled(l));
 
-export const canCancelRequisition = (req) => !!req && canDoAction(req.status, 'cancel') && !requisitionHasPo(req);
+export const canCancelRequisition = (req) => !!req && canDoAction(req, 'cancel') && !requisitionHasPo(req);
 export const canCancelRequisitionLine = (req, line) =>
-  !!req && !!line && canDoAction(req.status, 'cancel') && !isLineCancelled(line) && !isReqLineOnPo(req, line);
+  !!req && !!line && canDoAction(req, 'cancel') && !isLineCancelled(line) && !isReqLineOnPo(req, line);
 
 // סכום הדרישה: שורות פעילות בלבד. בדרישה שכל שורותיה בוטלו - הסכום המקורי (לתיעוד)
 const lineAmount = (l) => (Number(l.unitPrice) || 0) * (Number(l.quantity) || 0) * (Number(l.rate) || 1);
@@ -67,24 +97,51 @@ const buildSeedRequisitions = () => {
   return (data.requisitions || []).map(r => ({
     ...r,
     header: { description: r.description, justification: r.justification || '', buyerNotes: r.buyerNotes || '' },
+    // דרישה שאושרה (או הוחזרה מקניין אחרי אישור) - כל השורות שלה מאושרות
     lines: (linesByReq[r.id] || []).sort((a, b) => a.lineNumber - b.lineNumber)
+      .map(l => (APPROVED_STATUSES.includes(r.status) ? { ...l, approvedFlag: 'Y' } : l))
   }));
 };
 
+// דרישה מהנתונים הסטטיים שנוספה אחרי שכבר נשמרו דרישות בדפדפן - מקבלת מספר פנוי (ומזהי שורות וחלוקות בהתאם)
+const withNewId = (req, id) => ({
+  ...req,
+  id,
+  requisitionNumber: String(REQ_NUMBER_BASE + id - 1),
+  lines: req.lines.map(l => ({
+    ...l,
+    id: id * 1000 + l.lineNumber,
+    requisitionId: id,
+    distributions: (l.distributions || []).map((d, i) => ({ ...d, id: (id * 1000 + l.lineNumber) * 100 + i + 1, requisitionLineId: id * 1000 + l.lineNumber }))
+  }))
+});
+
 // טעינת דרישות מה-LocalStorage (או מהנתונים הסטטיים בהפעלה ראשונה) + המרת סטטוס ישן 'Draft' ל-INCOMPLETE
+// דרישות חדשות בנתונים הסטטיים (מזוהות לפי תיאור ותאריך יצירה) מצטרפות גם לרשימה שכבר שמורה
 const loadStoredRequisitions = () => {
   const stored = localStorage.getItem('appRequisitions');
-  const list = stored ? JSON.parse(stored) : buildSeedRequisitions();
+  const seed = buildSeedRequisitions();
+  let list = stored ? JSON.parse(stored) : seed;
+  if (stored) {
+    const seedKey = (r) => `${r.header?.description ?? r.description}|${r.creationDate}`;
+    seed.filter(r => !list.some(x => seedKey(x) === seedKey(r))).forEach(r => {
+      list = [...list, list.some(x => x.id === r.id) ? withNewId(r, getNextRequisitionId(list)) : r];
+    });
+  }
   return list.map(r => (r.status === 'Draft' ? { ...r, status: REQ_STATUS.INCOMPLETE } : r));
 };
 
 const getNextRequisitionId = (list) => (list.length > 0 ? Math.max(...list.map(r => r.id)) + 1 : 1);
 
 // בניית אובייקט דרישה מלא משורות העגלה (משמש גם לדרישה חדשה וגם לעדכון דרישה קיימת)
-const buildRequisition = ({ id, requisitionNumber, creationDate, headerData, lines, status, routingSteps, creatorId, actionHistory }) => {
+// preservedLines: שורות קיימות שנשמרות כמו שהן (מאושרות ומבוטלות בדרישה שאושרה), עם המזהים והמספרים שלהן,
+// כדי שהקישור להזמנות ולשריון לא ישבר. השורות החדשות ממוספרות אחריהן.
+const buildRequisition = ({ id, requisitionNumber, creationDate, headerData, lines, status, routingSteps, creatorId, actionHistory, preservedLines = [] }) => {
   const now = new Date().toISOString();
+  const firstNumber = preservedLines.reduce((m, l) => Math.max(m, Number(l.lineNumber) || 0), 0);
 
-  const formattedLines = lines.map((line, lIndex) => {
+  const formattedNewLines = lines.map((line, idx) => {
+    const lIndex = firstNumber + idx;
     const lineId = id * 1000 + (lIndex + 1);
     const catalogItem = line.itemId ? data.catalogItems.find(i => String(i.id) === String(line.itemId)) : null;
     return {
@@ -117,6 +174,7 @@ const buildRequisition = ({ id, requisitionNumber, creationDate, headerData, lin
       }))
     };
   });
+  const formattedLines = [...preservedLines, ...formattedNewLines].sort((a, b) => a.lineNumber - b.lineNumber);
 
   return {
     id,
@@ -138,7 +196,7 @@ const buildRequisition = ({ id, requisitionNumber, creationDate, headerData, lin
 const requisitionLineToCartLine = (line, idx) => {
   const newLineId = Date.now() + idx + Math.random();
   // eslint-disable-next-line no-unused-vars
-  const { requisitionId, cancelFlag, cancelDate, ...rest } = line;
+  const { requisitionId, cancelFlag, cancelDate, approvedFlag, ...rest } = line;
   return {
     ...rest,
     id: newLineId,
@@ -418,14 +476,14 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
       }]
     };
     updateCartAndSave(prev => [...prev, newLine]);
-    showToast('הפריט נוסף לסל בהצלחה!');
+    showToast(editingRequisition ? `הפריט נוסף לדרישה ${editingRequisition.requisitionNumber}` : 'הפריט נוסף לסל בהצלחה!');
   };
 
   const handleAddToCartItem = (itemId, quantity) => {
     const existingLine = cartLines.find(line => String(line.itemId) === String(itemId));
     if (existingLine) {
       updateLineQty(existingLine.id, existingLine.quantity + quantity);
-      showToast('כמות הפריט עודכנה בסל בהצלחה!');
+      showToast(editingRequisition ? `כמות הפריט עודכנה בדרישה ${editingRequisition.requisitionNumber}` : 'כמות הפריט עודכנה בסל בהצלחה!');
     } else {
       addNewLine(itemId, quantity); 
     }
@@ -478,7 +536,7 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
       }]
     };
     updateCartAndSave(prev => [...prev, newLine]);
-    showToast('פריט חופשי נוסף לסל בהצלחה!');
+    showToast(editingRequisition ? `פריט חופשי נוסף לדרישה ${editingRequisition.requisitionNumber}` : 'פריט חופשי נוסף לסל בהצלחה!');
   };
 
   const handleQuickOrderNonCatalog = (lineData) => {
@@ -544,6 +602,9 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     ? requisitions.find(r => r.id === editingRequisitionId) || null
     : null;
 
+  // דרישה שאושרה בעריכה: השורות המאושרות מוצגות בסל לקריאה בלבד
+  const editingLockedLines = isAmendment(editingRequisition) ? lockedLinesOf(editingRequisition) : [];
+
   // מספר הדרישה שיוצג בכותרת ה-Checkout: המספר הקיים בעריכה, או המספר הבא בתור
   const nextRequisitionNumber = editingRequisition
     ? editingRequisition.requisitionNumber
@@ -554,16 +615,25 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     const existing = targetId ? list.find(r => r.id === targetId) : null;
 
     if (existing) {
-      // שורות שבוטלו לא נטענות לסל - שומרים אותן בדרישה כדי לא לאבד את ההיסטוריה
-      const cancelledLines = (existing.lines || []).filter(isLineCancelled);
-      const updatedReq = buildRequisition({
+      const common = {
         id: existing.id,
         requisitionNumber: existing.requisitionNumber,
         creationDate: existing.creationDate,
         creatorId: existing.creatorId,
         actionHistory: existing.actionHistory,
-        headerData, lines: [...lines, ...cancelledLines], status, routingSteps
-      });
+        headerData, status, routingSteps
+      };
+      // דרישה שאושרה: השורות המאושרות והמבוטלות נשמרות כמו שהן, והסל מכיל רק את השורות החדשות
+      // דרישה רגילה: שורות שבוטלו לא נטענות לסל - שומרים אותן בדרישה כדי לא לאבד את ההיסטוריה
+      const updatedReq = hasApprovedLines(existing)
+        ? buildRequisition({
+          ...common,
+          lines,
+          preservedLines: (existing.lines || [])
+            .filter(l => isLineApproved(existing, l) || isLineCancelled(l))
+            .map(l => (isLineApproved(existing, l) ? { ...l, approvedFlag: 'Y' } : l))
+        })
+        : buildRequisition({ ...common, lines: [...lines, ...(existing.lines || []).filter(isLineCancelled)] });
       return { list: list.map(r => (r.id === existing.id ? updatedReq : r)), requisition: updatedReq };
     }
 
@@ -585,23 +655,34 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
       targetId: editingRequisitionId,
       headerData: existingHeader || { description: 'טיוטה שנשמרה אוטומטית' },
       lines: cartLines,
-      status: REQ_STATUS.INCOMPLETE,
+      status: draftStatusFor(editingRequisition),
       routingSteps: []
     }).list;
   };
 
   // שליחה/שמירה מתוך ה-Checkout: יוצר דרישה חדשה, או מעדכן את הדרישה שבעריכה.
   // בשליחה לאישור: בדיקת תקציב ושריון. אם השריון נכשל - הדרישה לא נשמרת ומוחזרת שגיאה
-  const handleCheckoutSubmit = async (headerData, finalLines, emptyCart, routingSteps = [], status = REQ_STATUS.INCOMPLETE) => {
-    // הגנה נוספת: אין העברה לסבב אישורים בלי סעיף תקציבי מלא בכל שורות החלוקה
-    if (status === REQ_STATUS.IN_PROCESS && validateBudgetForApproval(finalLines).length > 0) {
-      showToast('לא ניתן להעביר לסבב: חסר סעיף תקציבי בחלק משורות החלוקה');
-      return { ok: false, message: 'חסר סעיף תקציבי בחלק משורות החלוקה' };
+  const handleCheckoutSubmit = async (headerData, finalLines, emptyCart, routingSteps = [], status = REQ_STATUS.INCOMPLETE, { validationWarnings = [] } = {}) => {
+    // הגנה נוספת: אין העברה לסבב אישורים כשיש הודעה חוסמת (סעיף תקציבי חסר או לא תקין וכו')
+    if (status === REQ_STATUS.IN_PROCESS && validateCheckout({ rules: loadValidationRulesSync(), header: headerData, lines: finalLines }).all.some(m => m.severity === 'ERROR')) {
+      showToast('לא ניתן להעביר לסבב: יש בדרישה שדות שצריך לתקן');
+      return { ok: false, message: 'יש בדרישה שדות שצריך לתקן' };
+    }
+    // סבב המאשרים: ממונה כספים חובה וחבר בקבוצת ממוני הכספים (ולידציות "סבב מאשרים")
+    if (status === REQ_STATUS.IN_PROCESS) {
+      const routingBlock = runScreen('APPROVAL_ROUTING', routingContext({ steps: routingSteps, lines: finalLines }), loadValidationRulesSync()).filter(m => m.severity === 'ERROR');
+      if (routingBlock.length > 0) return { ok: false, message: 'לא ניתן לשלוח לאישור', errors: routingBlock.map(m => m.message) };
     }
     const isNew = !editingRequisitionId || !requisitions.some(r => r.id === editingRequisitionId);
+    const editing = isNew ? null : requisitions.find(r => r.id === editingRequisitionId);
+    // דרישה שאושרה: שמירה בלי שליחה משאירה אותה בסטטוס שלה (הוחזרה מקניין / נדחתה), לא טיוטה
+    const finalStatus = status === REQ_STATUS.INCOMPLETE ? draftStatusFor(editing) : status;
+    if (status === REQ_STATUS.IN_PROCESS && isAmendment(editing) && finalLines.length === 0) {
+      return { ok: false, message: 'יש להוסיף לפחות שורה חדשה לפני שליחה לסבב' };
+    }
     const { list, requisition } = upsertRequisition(requisitions, {
       targetId: editingRequisitionId,
-      headerData, lines: finalLines, status, routingSteps
+      headerData, lines: finalLines, status: finalStatus, routingSteps
     });
 
     const actions = [];
@@ -611,6 +692,10 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
       if (!funds.ok) {
         const failed = funds.check.accounts.filter(a => !a.ok);
         return { ok: false, message: 'לא ניתן לשריין תקציב', errors: failed.map(fundsFailureMessage) };
+      }
+      // אזהרות מהוולידציות שהיו בדרישה בזמן ההגשה - נרשמות ביומן הפעולות
+      if (validationWarnings.length > 0) {
+        actions.push(makeAction('VALIDATION_WARNING', { userId: currentUser.id, note: validationWarnings.join(' | ') }));
       }
       actions.push(makeAction('SUBMIT', { userId: currentUser.id }));
       actions.push(makeAction('FUNDS_RESERVE', { userId: null, amount: funds.reservedAmount }));
@@ -634,7 +719,7 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
   // מחיקת דרישה (רק בסטטוסים המותרים)
   const deleteRequisition = (reqId) => {
     const req = requisitions.find(r => r.id === reqId);
-    if (!req || !canDoAction(req.status, 'delete')) {
+    if (!req || !canDoAction(req, 'delete')) {
       showToast('לא ניתן למחוק דרישה בסטטוס הנוכחי');
       return false;
     }
@@ -649,7 +734,7 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
   // ביטול דרישה (רק APPROVED / RETURNED)
   const cancelRequisition = (reqId) => {
     const req = requisitions.find(r => r.id === reqId);
-    if (!req || !canDoAction(req.status, 'cancel')) {
+    if (!req || !canDoAction(req, 'cancel')) {
       showToast('לא ניתן לבטל דרישה בסטטוס הנוכחי');
       return false;
     }
@@ -673,7 +758,7 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
   const cancelRequisitionLine = (reqId, lineId) => {
     const req = requisitions.find(r => r.id === reqId);
     const line = req?.lines?.find(l => l.id === lineId);
-    if (!req || !line || !canDoAction(req.status, 'cancel')) {
+    if (!req || !line || !canDoAction(req, 'cancel')) {
       showToast('לא ניתן לבטל שורות בדרישה בסטטוס הנוכחי');
       return false;
     }
@@ -706,7 +791,7 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
   // saveCartFirst = true -> הסל הנוכחי נשמר קודם כטיוטה. false -> הסל הנוכחי נדרס.
   const startEditRequisition = (reqId, { saveCartFirst = false } = {}) => {
     const target = requisitions.find(r => r.id === reqId);
-    if (!target || !canDoAction(target.status, 'edit')) {
+    if (!target || !canDoAction(target, 'edit')) {
       showToast('לא ניתן לערוך דרישה בסטטוס הנוכחי');
       return false;
     }
@@ -717,19 +802,24 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     }
 
     // דרישה בסבב אישורים נמשכת חזרה לטיוטה וסבב האישורים מתאפס
+    // (דרישה שאושרה חוזרת ל"הוחזרה מקניין", ומשתחרר רק השריון של השורות החדשות)
     const isWithdraw = target.status === REQ_STATUS.IN_PROCESS;
+    const amend = isAmendment(target);
     if (isWithdraw) {
       list = list.map(r => r.id === reqId
-        ? appendActions({ ...r, status: REQ_STATUS.INCOMPLETE, routingSteps: [], lastUpdateDate: new Date().toISOString() }, [makeAction('WITHDRAW', { userId: currentUser?.id })])
+        ? appendActions({ ...r, status: amend ? REQ_STATUS.RETURNED : REQ_STATUS.INCOMPLETE, routingSteps: amend ? r.routingSteps : [], lastUpdateDate: new Date().toISOString() }, [makeAction('WITHDRAW', { userId: currentUser?.id })])
         : r
       );
     }
     persistRequisitions(list);
-    if (isWithdraw) releaseAndLog(reqId, 'משיכת הדרישה מסבב האישורים');
+    if (isWithdraw) releaseAndLog(reqId, 'משיכת הדרישה מסבב האישורים', amend ? unapprovedLineIds(target) : null);
 
-    updateCartAndSave(activeLines(target).map(requisitionLineToCartLine));
+    // בדרישה שאושרה נטענות לסל רק השורות שעוד לא אושרו (השורות המאושרות מוצגות בסל לקריאה בלבד)
+    updateCartAndSave(activeLines(target).filter(l => !amend || !isLineApproved(target, l)).map(requisitionLineToCartLine));
     setEditingRequisitionId(reqId);
-    showToast(saveCartFirst ? 'הסל הקודם נשמר כטיוטה, והדרישה נטענה לעריכה' : `דרישה ${target.requisitionNumber} נטענה לעריכה`);
+    showToast(saveCartFirst
+      ? 'הסל הקודם נשמר כטיוטה, והדרישה נטענה לעריכה'
+      : amend ? `דרישה ${target.requisitionNumber} נטענה להוספת שורות` : `דרישה ${target.requisitionNumber} נטענה לעריכה`);
     handleNavigate('checkout');
     return true;
   };
@@ -780,12 +870,17 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     const stepTitle = result.steps.filter(s => result.actedStepIds.includes(s.id)).map(stepRoleLabel).join(', ');
     const now = new Date().toISOString();
     const finalStatus = result.outcome === 'APPROVED' ? REQ_STATUS.APPROVED : result.outcome === 'REJECTED' ? REQ_STATUS.REJECTED : REQ_STATUS.IN_PROCESS;
-    const updated = appendActions({ ...req, routingSteps: result.steps, status: finalStatus, lastUpdateDate: now }, [
+    // באישור סופי כל השורות הפעילות נעשות מאושרות (ונעולות אם הדרישה תוחזר מקניין)
+    const lines = finalStatus === REQ_STATUS.APPROVED
+      ? (req.lines || []).map(l => (isLineCancelled(l) ? l : { ...l, approvedFlag: 'Y' }))
+      : req.lines;
+    const updated = appendActions({ ...req, lines, routingSteps: result.steps, status: finalStatus, lastUpdateDate: now }, [
       makeAction(decision === 'approve' ? 'APPROVE' : 'REJECT', { userId: currentUser.id, note, stepTitle }),
       result.outcome === 'APPROVED' ? makeAction('FINAL_APPROVE', { userId: null, note: 'כל המאשרים אישרו. השריון נשאר בתוקף.' }) : null
     ]);
     persistRequisitions(requisitions.map(r => (r.id === reqId ? updated : r)));
-    if (result.outcome === 'REJECTED') releaseAndLog(reqId, 'דחיית הדרישה');
+    // דחייה: בדרישה שאושרה משתחרר רק השריון של השורות החדשות
+    if (result.outcome === 'REJECTED') releaseAndLog(reqId, 'דחיית הדרישה', isAmendment(req) ? unapprovedLineIds(req) : null);
     showToast(result.outcome === 'APPROVED'
       ? `דרישה ${req.requisitionNumber} אושרה סופית`
       : result.outcome === 'REJECTED' ? `דרישה ${req.requisitionNumber} נדחתה והשריון שוחרר` : `אישרת את דרישה ${req.requisitionNumber}`);
@@ -836,6 +931,7 @@ export function useAppData(currentUser, showToast, handleNavigate, setShowOrgPro
     myRequisitions,
     editingRequisitionId,
     editingRequisition,
+    editingLockedLines,
     nextRequisitionNumber,
     handleCheckoutSubmit,
     deleteRequisition,

@@ -9,12 +9,13 @@ export default function useCheckout({
   globalProject, // <--- קבלת פרויקט גלובלי
   globalTask,    // <--- קבלת משימה גלובלית
   globalExpType, // <--- קבלת סוג הוצאה גלובלי
-  globalExpOrg   // <--- קבלת יחידה מממנת גלובלית
+  globalExpOrg,  // <--- קבלת יחידה מממנת גלובלית
+  initialHeader = null  // כותרת הדרישה שבעריכה (תיאור, הצדקה והערות לקניין)
 }) {
   const [headerOrg, setHeaderOrg] = useState(String(globalOrg));
-  const [buyerNotes, setBuyerNotes] = useState('');
-  const [justification, setJustification] = useState('');
-  const [headerDescription, setHeaderDescription] = useState('');
+  const [buyerNotes, setBuyerNotes] = useState(initialHeader?.buyerNotes || '');
+  const [justification, setJustification] = useState(initialHeader?.justification || '');
+  const [headerDescription, setHeaderDescription] = useState(initialHeader?.description || '');
   
   // אתחול כותרת הקופה עם הערכים הגלובליים
   const [headerProjectId, setHeaderProjectId] = useState(globalProject || '');

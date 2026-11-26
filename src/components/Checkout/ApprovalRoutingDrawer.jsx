@@ -2,7 +2,11 @@ import { useState, useEffect, useMemo } from 'react';
 import data from '../../data/data.json';
 import { getApprovalConfig } from '../../services/approvalConfigService';
 import { checkFunds, fundsFailureMessage } from '../../services/fundsService';
-import { buildApprovalList } from '../../utils/approvalEngine';
+import { buildApprovalList, suggestKeyMemberSteps, requiredStepGroups, isGroupMember } from '../../utils/approvalEngine';
+import { runScreen, hasBlocking } from '../../utils/validationEngine';
+import { routingContext } from '../../utils/validationScreens';
+import { useValidationRules } from '../../hooks/validationRulesContext';
+import ValidationSummary from '../Validation/ValidationSummary';
 
 const money = (n) => `₪${(Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -12,7 +16,8 @@ const TONES = {
   rule: { ring: 'border-teal-500', num: 'text-teal-600 dark:text-teal-400', avatar: 'from-teal-100 to-cyan-100 dark:from-teal-900/40 dark:to-cyan-900/40 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800/50', label: 'text-teal-600 dark:text-teal-400' },
   buyer: { ring: 'border-purple-500', num: 'text-purple-600 dark:text-purple-400', avatar: 'from-purple-100 to-pink-100 dark:from-purple-900/40 dark:to-pink-900/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/50', label: 'text-purple-600 dark:text-purple-400' }
 };
-const toneOf = (step) => (step.source === 'RULE' ? TONES.rule : step.source === 'BUYER' ? TONES.buyer : TONES.manual);
+// ממונה הכספים מהפרויקט נקבע לפי חוק (בצבע החוקים), אבל המבקש יכול להזיז או להסיר אותו
+const toneOf = (step) => (step.source === 'RULE' || step.source === 'KEY_MEMBER' ? TONES.rule : step.source === 'BUYER' ? TONES.buyer : TONES.manual);
 
 const userStep = (u, source, title) => ({
   id: `${source.toLowerCase()}-${u.id}-${Math.random().toString(36).slice(2, 8)}`,
@@ -24,6 +29,21 @@ const userStep = (u, source, title) => ({
   role: u.job || 'צוות ארגוני',
   status: 'pending'
 });
+
+// צעדים מהחוק (Primary Planner של הפרויקט) נכנסים לרשימה שהמבקש עורך:
+// משתמש שכבר ברשימה מקבל את הסימון והסיבה, ומי שלא - נוסף בסוף הרשימה.
+// מאשר אחר ברשימה שחבר בקבוצה הנדרשת נחשב גם הוא כמאשר מהקבוצה
+const mergeKeyMembers = (prev, suggested, groupCodes, config) => {
+  const marked = prev.map(step => {
+    if (step.requiredGroupCode || step.kind !== 'USER') return step;
+    const fromRule = suggested.find(sg => String(sg.userId) === String(step.userId));
+    if (fromRule) return { ...step, source: fromRule.source, requiredGroupCode: fromRule.requiredGroupCode, title: fromRule.title, reasons: fromRule.reasons };
+    const group = groupCodes.find(code => isGroupMember(step.userId, code, config));
+    return group ? { ...step, requiredGroupCode: group } : step;
+  });
+  const added = suggested.filter(sg => !marked.some(step => String(step.userId) === String(sg.userId)));
+  return [...marked, ...added];
+};
 
 // סיבת הכניסה לסבב: "שורות 1, 3 · אוגר זיכרון" / שם החוק לחוק ברמת הכותרת
 const reasonText = (r) => {
@@ -41,7 +61,7 @@ const ErrorBox = ({ title, messages }) => (
   </div>
 );
 
-export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, lines, headerBuyer, headerOrg, editingRequisitionId, onSubmitApproval }) {
+export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, lines, validationMessages = [], headerBuyer, headerOrg, editingRequisitionId, onSubmitApproval }) {
   // המגירה מורכבת מחדש בכל פתיחה, ולכן המצב ההתחלתי מחושב פעם אחת כאן
   const [manualSteps, setManualSteps] = useState(() => {
     const initialSteps = [];
@@ -68,6 +88,7 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
   const [funds, setFunds] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const validationRules = useValidationRules();
 
   // הגדרות הסבב ובדיקת התקציב - דרך שכבת השירותים
   useEffect(() => {
@@ -76,8 +97,13 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
       if (cancelled) return;
       setConfig(cfg);
       setFunds(fundsResult);
+      // ממונה הכספים מהפרויקט (Primary Planner) - נכנס לרשימה שהמבקש יכול לסדר ולהסיר
+      const suggested = suggestKeyMemberSteps({ lines, headerOrg, requesterId: currentUser.id, config: cfg });
+      setManualSteps(prev => mergeKeyMembers(prev, suggested, requiredStepGroups(cfg), cfg));
     });
     return () => { cancelled = true; };
+    // המגירה נטענת פעם אחת לכל פתיחה; שינוי בשורות מגיע עם מגירה חדשה
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, editingRequisitionId]);
 
   // רשימת המאשרים המלאה: הידניים + קבוצות לפי החוקים + קניינים
@@ -89,13 +115,22 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
   const stageSizes = useMemo(() => routingSteps.reduce((m, s) => ({ ...m, [s.stage]: (m[s.stage] || 0) + 1 }), {}), [routingSteps]);
   const fundsFailures = funds && !funds.ok ? funds.accounts.filter(a => !a.ok).map(fundsFailureMessage) : [];
   const isLoading = !config || !funds;
-  const canSubmit = !isLoading && !isSubmitting && routingSteps.length > 0 && routingErrors.length === 0 && funds.ok;
+  // ולידציות "סבב מאשרים": ממונה כספים חובה, וחייב להיות חבר בקבוצת ממוני הכספים
+  const routing = useMemo(() => (config ? routingContext({ steps: routingSteps, lines }) : null), [config, routingSteps, lines]);
+  const routingMessages = useMemo(() => (routing ? runScreen('APPROVAL_ROUTING', routing, validationRules) : []), [routing, validationRules]);
+  const notInGroupIds = routing?.notInGroupStepIds || [];
+  const requiredGroups = config ? requiredStepGroups(config) : [];
+  const canSubmit = !isLoading && !isSubmitting && routingSteps.length > 0 && routingErrors.length === 0 && !hasBlocking(routingMessages) && funds.ok;
 
   const handleAddApprover = () => {
     if (!selectedUserToAdd) return;
     const userObj = data.users.find(u => String(u.id) === String(selectedUserToAdd));
     if (userObj) {
-      setManualSteps(prev => [...prev, userStep(userObj, 'ADHOC', 'מאשר נוסף')]);
+      const step = userStep(userObj, 'ADHOC', 'מאשר נוסף');
+      // חבר בקבוצה שחובה לכלול (ממוני כספים) - נחשב כממונה הכספים של הסבב
+      const group = config ? requiredStepGroups(config).find(code => isGroupMember(userObj.id, code, config)) : null;
+      const groupRule = group ? config.approvalRules.find(r => r.action?.groupCode === group && r.action?.stepTitle) : null;
+      setManualSteps(prev => [...prev, group ? { ...step, requiredGroupCode: group, title: groupRule?.action.stepTitle || step.title } : step]);
       setSelectedUserToAdd('');
     }
   };
@@ -176,7 +211,7 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">גרור את המאשרים שבחרת כדי לשנות סדר. מאשרים לפי חוקי המערכת והקניינים נקבעים אוטומטית.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">גרור כדי לשנות את סדר המאשרים שבחרת ושל ממונה הכספים. שאר המאשרים לפי חוקי המערכת והקניינים נקבעים אוטומטית.</p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 scrollbar-thin space-y-6">
@@ -199,6 +234,11 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
             <ErrorBox title="אין מספיק תקציב - לא ניתן לשלוח לאישור" messages={fundsFailures} />
           )}
 
+          {/* אזהרות והודעות מידע מהוולידציות (הודעות חוסמות לא מגיעות לכאן - הן עוצרות לפני פתיחת המגירה) */}
+          <ValidationSummary messages={validationMessages} titles={{ WARNING: 'אזהרות (אפשר לשלוח, והן יירשמו ביומן הפעולות)' }} />
+
+          <ValidationSummary messages={routingMessages} titles={{ ERROR: 'לא ניתן לשלוח לאישור' }} />
+
           {routingErrors.length > 0 && <ErrorBox title="לא ניתן להשלים את סבב המאשרים" messages={routingErrors.map(e => e.message)} />}
 
           {routingSteps.length === 0 ? (
@@ -213,6 +253,7 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
                 const tone = toneOf(step);
                 const isParallel = stageSizes[step.stage] > 1;
                 const initial = step.name ? step.name.charAt(0) : '?';
+                const notInGroup = notInGroupIds.includes(step.id);
                 const hasError = routingErrors.some(e => e.stepId === step.id);
 
                 return (
@@ -241,6 +282,7 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className={`text-[10px] font-black uppercase tracking-widest ${tone.label}`}>{step.title}</span>
+                            {step.requiredGroupCode && step.source !== 'KEY_MEMBER' && !notInGroup && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300">ממוני כספים</span>}
                             {isParallel && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300">במקביל</span>}
                           </div>
                           <div className="font-bold text-gray-900 dark:text-white text-base leading-tight">
@@ -249,6 +291,9 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
                           <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                             {step.kind === 'GROUP' ? (step.role ? `חברי הקבוצה: ${step.role}` : 'אין חברים פעילים בקבוצה') : step.role}
                           </div>
+                          {notInGroup && (
+                            <div className="text-[11px] font-bold text-amber-600 dark:text-amber-400 mt-1">לא חבר/ה בקבוצת ממוני הכספים · נשאר/ת בסבב כמאשר/ת</div>
+                          )}
                           {step.reasons?.length > 0 && (
                             <div className="text-[11px] font-semibold text-teal-700 dark:text-teal-300 mt-1 space-y-0.5">
                               {step.reasons.map(r => <div key={r.ruleId}>{reasonText(r)}</div>)}
@@ -300,7 +345,7 @@ export default function ApprovalRoutingDrawer({ isOpen, onClose, currentUser, li
               >
                 <option value="">בחר משתמש...</option>
                 {data.users.filter(u => u.id !== currentUser.id).map(u => (
-                  <option key={u.id} value={u.id}>{u.firstName} {u.lastName || ''} {u.job ? `- ${u.job}` : ''}</option>
+                  <option key={u.id} value={u.id}>{u.firstName} {u.lastName || ''} {u.job ? `- ${u.job}` : ''}{config && requiredGroups.some(code => isGroupMember(u.id, code, config)) ? ' · ממוני כספים' : ''}</option>
                 ))}
               </select>
               <button

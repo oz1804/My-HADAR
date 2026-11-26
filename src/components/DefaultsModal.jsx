@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import data from '../data/data.json';
+import { optionWithEndDate } from '../utils/lovFormat';
 
 export default function DefaultsModal({ 
   isOpen, 
@@ -304,7 +305,7 @@ export default function DefaultsModal({
                  >
                    <option value="">בחר פרויקט...</option>
                    {availableProjects?.map(p => (
-                     <option key={p.id} value={p.id}>{p.projectCode} - {p.projectName}</option>
+                     <option key={p.id} value={p.id}>{optionWithEndDate(p.projectCode, p.projectName, p)}</option>
                    ))}
                  </select>
                </div>
@@ -318,7 +319,7 @@ export default function DefaultsModal({
                  >
                    <option value="">בחר משימה...</option>
                    {availableTasks?.map(t => (
-                     <option key={t.id} value={t.id}>{t.taskCode} - {t.taskName}</option>
+                     <option key={t.id} value={t.id}>{optionWithEndDate(t.taskCode, t.taskName, t)}</option>
                    ))}
                  </select>
                </div>

@@ -1,6 +1,10 @@
 import data from '../../data/data.json';
-import { getMissingDistFields, getInvalidDistFields, isPurchasingAllowed, getLovText, BUDGET_SETUP_CONTACT } from '../../utils/budgetValidation';
+import { isPurchasingAllowed, getLovText } from '../../utils/budgetValidation';
+import { messagesFor } from '../../utils/validationEngine';
 import LovCombobox from './LovCombobox';
+import { projectLovProps, taskLovProps } from '../../utils/lovFormat';
+import { FieldLabelRow, FieldMessageBelow } from '../Validation/FieldMessage';
+import { fieldToneClass } from '../Validation/fieldTone';
 
 export default function CheckoutLineDistributionRow({ 
   dist, 
@@ -9,18 +13,13 @@ export default function CheckoutLineDistributionRow({
   onDistFieldChange, 
   onRemoveDist, 
   canRemove,
-  showBudgetErrors = false
+  messages = []      // הודעות הוולידציה של שורת החלוקה (כבר מסוננות לפי מה שמוצג עכשיו)
 }) {
   const isInventory = line.destinationType === 'Inventory';
 
-  // --- סימון שדות סעיף תקציבי ---
-  // חסרים: רק אחרי ניסיון העברה לסבב. לא תקינים מול ה-LOV: תמיד, כדי שהמשתמש יראה מיד
-  const missingFields = showBudgetErrors ? getMissingDistFields(line, dist) : [];
-  const invalidErrors = getInvalidDistFields(line, dist);
-  const invalidFields = invalidErrors.map(e => e.field);
-  const needsSetup = invalidErrors.some(e => e.needsSetup);
-  const hasMissing = missingFields.length > 0 || invalidErrors.length > 0;
-  const isFieldBad = (field) => missingFields.includes(field) || invalidFields.includes(field);
+  // --- הודעות הסעיף התקציבי: ליד השדה במחשב, מתחתיו בנייד ---
+  const fm = (field) => messagesFor(messages, field);
+  const hasBlocking = messages.some(m => m.severity === 'ERROR');
   const requiredMark = <span className="text-rose-500 ms-0.5">*</span>;
 
   // --- לוגיקת סינון תוקף (Dates) ---
@@ -66,7 +65,7 @@ export default function CheckoutLineDistributionRow({
   const availableExpOrgs = data.expenditureOrganizations?.filter(org => isItemActive(org) && isPurchasingAllowed(org));
 
   return (
-    <div className={`flex flex-col gap-3 p-3 bg-white dark:bg-gray-800 border rounded-xl relative transition-colors ${hasMissing ? 'border-rose-300 dark:border-rose-700/70' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'}`}>
+    <div className={`flex flex-col gap-3 p-3 bg-white dark:bg-gray-800 border rounded-xl relative transition-colors ${hasBlocking ? 'border-rose-300 dark:border-rose-700/70' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'}`}>
       
       <div className="flex flex-wrap lg:flex-nowrap items-center gap-3 w-full">
         <div className="w-6 text-center font-bold text-gray-400 text-xs shrink-0">
@@ -119,43 +118,51 @@ export default function CheckoutLineDistributionRow({
       </div>
 
       <div className={`grid grid-cols-2 ${isInventory ? 'lg:grid-cols-2' : 'lg:grid-cols-4'} gap-2 w-full lg:pl-12 pt-2 border-t border-gray-100 dark:border-gray-700/50 mt-1`}>
-        <div className="flex flex-col">
-          <label className="text-[10px] text-gray-500 font-bold mb-0.5">פרויקט{requiredMark}</label>
+        <div className="flex flex-col min-w-0" data-validation-field="projectId">
+          <FieldLabelRow messages={fm('projectId')}>
+            <label className="text-[10px] text-gray-500 font-bold mb-0.5">פרויקט{requiredMark}</label>
+          </FieldLabelRow>
           <LovCombobox
             ariaLabel="פרויקט"
             items={data.projects}
             validItems={availableProjects}
             value={dist.projectId}
             text={getLovText(dist, 'projectId')}
-            getCode={p => p.projectCode}
-            getName={p => p.projectName}
+            {...projectLovProps}
             onCommit={commitLov('projectId')}
             placeholder="הקלד פרויקט..."
-            invalid={isFieldBad('projectId')}
+            invalid={fm('projectId').some(m => m.severity === 'ERROR')}
+            toneClass={fieldToneClass(fm('projectId'))}
           />
+          <FieldMessageBelow messages={fm('projectId')} />
         </div>
 
-        <div className="flex flex-col">
-          <label className="text-[10px] text-gray-500 font-bold mb-0.5">משימה{requiredMark}</label>
+        <div className="flex flex-col min-w-0" data-validation-field="taskId">
+          <FieldLabelRow messages={fm('taskId')}>
+            <label className="text-[10px] text-gray-500 font-bold mb-0.5">משימה{requiredMark}</label>
+          </FieldLabelRow>
           <LovCombobox
             ariaLabel="משימה"
             items={data.tasks}
             validItems={availableTasks}
             value={dist.taskId}
             text={getLovText(dist, 'taskId')}
-            getCode={t => t.taskCode}
-            getName={t => t.taskName}
+            {...taskLovProps}
             prefer={t => String(t.projectId) === String(dist.projectId)}
             onCommit={commitLov('taskId')}
             placeholder="הקלד משימה..."
-            invalid={isFieldBad('taskId')}
+            invalid={fm('taskId').some(m => m.severity === 'ERROR')}
+            toneClass={fieldToneClass(fm('taskId'))}
           />
+          <FieldMessageBelow messages={fm('taskId')} />
         </div>
 
         {!isInventory && (
           <>
-            <div className="flex flex-col">
-              <label className="text-[10px] text-gray-500 font-bold mb-0.5">סוג הוצאה{requiredMark}</label>
+            <div className="flex flex-col min-w-0" data-validation-field="expenditureTypeId">
+              <FieldLabelRow messages={fm('expenditureTypeId')}>
+                <label className="text-[10px] text-gray-500 font-bold mb-0.5">סוג הוצאה{requiredMark}</label>
+              </FieldLabelRow>
               <LovCombobox
                 ariaLabel="סוג הוצאה"
                 items={data.expenditureTypes}
@@ -167,12 +174,16 @@ export default function CheckoutLineDistributionRow({
                 getDisplay={e => e.name}
                 onCommit={commitLov('expenditureTypeId')}
                 placeholder="הקלד סוג הוצאה..."
-                invalid={isFieldBad('expenditureTypeId')}
+                invalid={fm('expenditureTypeId').some(m => m.severity === 'ERROR')}
+                toneClass={fieldToneClass(fm('expenditureTypeId'))}
               />
+              <FieldMessageBelow messages={fm('expenditureTypeId')} />
             </div>
 
-            <div className="flex flex-col">
-              <label className="text-[10px] text-gray-500 font-bold mb-0.5">יחידה מממנת{requiredMark}</label>
+            <div className="flex flex-col min-w-0" data-validation-field="expenditureOrgId">
+              <FieldLabelRow messages={fm('expenditureOrgId')}>
+                <label className="text-[10px] text-gray-500 font-bold mb-0.5">יחידה מממנת{requiredMark}</label>
+              </FieldLabelRow>
               <LovCombobox
                 ariaLabel="יחידה מממנת"
                 items={data.expenditureOrganizations}
@@ -184,27 +195,15 @@ export default function CheckoutLineDistributionRow({
                 getDisplay={o => o.name}
                 onCommit={commitLov('expenditureOrgId')}
                 placeholder="הקלד יחידה מממנת..."
-                invalid={isFieldBad('expenditureOrgId')}
+                invalid={fm('expenditureOrgId').some(m => m.severity === 'ERROR')}
+                toneClass={fieldToneClass(fm('expenditureOrgId'))}
               />
+              <FieldMessageBelow messages={fm('expenditureOrgId')} />
             </div>
           </>
         )}
       </div>
 
-      {/* --- הסבר על ערכים לא תקינים + הפנייה לכלכלן / סת"ב --- */}
-      {invalidErrors.length > 0 && (
-        <div role="alert" className="flex items-start gap-2 p-2.5 rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-900/20 lg:ms-12">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-rose-500 shrink-0 mt-0.5">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-          </svg>
-          <div className="text-xs text-rose-700 dark:text-rose-300 min-w-0">
-            <ul className="space-y-0.5 font-semibold">
-              {invalidErrors.map(err => <li key={err.field}>{err.message}</li>)}
-            </ul>
-            {needsSetup && <p className="mt-1 font-bold">{BUDGET_SETUP_CONTACT}</p>}
-          </div>
-        </div>
-      )}
 
     </div>
   );

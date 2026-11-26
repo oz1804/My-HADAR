@@ -3,7 +3,8 @@ import CheckoutLineRow from './CheckoutLineRow';
 import DocumentsModal from './DocumentsModal'; 
 import BulkEditForm from './BulkEditForm';
 import QuickAddForm from './QuickAddForm';
-import { BUDGET_FIELD_LABELS, BUDGET_SETUP_CONTACT } from '../../utils/budgetValidation';
+import { visibleMessages } from '../../utils/validationEngine';
+import { getField } from '../../utils/validationScreens';
 
 const PAGE_SIZE = 10;
 
@@ -37,8 +38,8 @@ export default function CheckoutLines({
   globalTask,      // <--- קבלת המשימה מ-Checkout
   globalExpType,   // <--- קבלת סוג ההוצאה מ-Checkout
   globalExpOrg,    // <--- קבלת היחידה המממנת מ-Checkout
-  budgetErrors = [],        // שורות עם סעיף תקציבי חסר (מ-validateBudgetForApproval)
-  showBudgetErrors = false, // האם להציג את השגיאות (רק אחרי ניסיון העברה לסבב)
+  validation = null,        // תוצאת הוולידציות של הסל (validateCheckout)
+  showValidation = false,   // הייתה לחיצה על "העבר לסבב" -> מוצגות גם הודעות "בפעולה" (כמו שדות חובה)
   budgetFocusKey = 0        // משתנה בכל ניסיון העברה -> קפיצה לשגיאה הראשונה
 }) {
   const [openDocsLineId, setOpenDocsLineId] = useState(null);
@@ -63,10 +64,17 @@ export default function CheckoutLines({
     setPrevLinesLength(lines.length);
   }, [lines.length, prevLinesLength]);
 
-  // --- סעיפים תקציביים חסרים ---
+  // --- הודעות הוולידציה לשורות ולשורות החלוקה ---
   const budgetErrorsRef = useRef(null);
-  const budgetErrorsByLine = Object.fromEntries(budgetErrors.map(e => [e.lineId, e]));
-  const hasVisibleBudgetErrors = showBudgetErrors && budgetErrors.length > 0;
+  const lineMessages = (lineId) => visibleMessages(validation?.lines?.[lineId], showValidation);
+  const distMessages = (distId) => visibleMessages(validation?.dists?.[distId], showValidation);
+  // שורות עם הודעה חוסמת (לתיבת הסיכום אחרי ניסיון העברה לסבב)
+  const budgetErrors = lines.filter(Boolean).map((line, idx) => {
+    const blocking = (validation?.all || []).filter(m => m.lineId === line.id && m.severity === 'ERROR');
+    const labels = [...new Set(blocking.map(m => getField(m.scope === 'DIST' ? 'BUDGET' : 'CHECKOUT_LINE', m.field)?.label).filter(Boolean))];
+    return { lineId: line.id, lineNumber: line.lineNumber || idx + 1, itemDescription: line.itemDescription, labels, hasBudget: blocking.some(m => m.scope === 'DIST') };
+  }).filter(e => e.labels.length > 0);
+  const hasVisibleBudgetErrors = showValidation && budgetErrors.length > 0;
 
   // מעבר לעמוד של שורה מסוימת וגלילה אליה
   const jumpToLine = (lineId) => {
@@ -217,8 +225,7 @@ export default function CheckoutLines({
             <div className="min-w-0 flex-1">
               <h4 className="font-black text-rose-800 dark:text-rose-200">לא ניתן להעביר לסבב אישורים</h4>
               <p className="text-sm text-rose-700 dark:text-rose-300 mt-0.5">
-                {budgetErrors.length === 1 ? 'בשורה אחת יש סעיף תקציבי חסר או לא תקין.' : `ב-${budgetErrors.length} שורות יש סעיף תקציבי חסר או לא תקין.`} יש לתקן את השדות המסומנים בחלוקה התקציבית (או לעדכן אותם לכל השורות דרך התקציב בכותרת הסל).
-                {budgetErrors.some(e => e.dists.some(d => (d.invalid || []).some(x => x.needsSetup))) && <span className="block font-bold mt-1">{BUDGET_SETUP_CONTACT}</span>}
+                {budgetErrors.length === 1 ? 'בשורה אחת יש שדות שצריך לתקן.' : `ב-${budgetErrors.length} שורות יש שדות שצריך לתקן.`} ההודעות מוצגות ליד השדות המסומנים{budgetErrors.some(e => e.hasBudget) ? ' (סעיף תקציבי אפשר לעדכן לכל השורות דרך התקציב בכותרת הסל)' : ''}.
               </p>
               <ul className="mt-3 space-y-1.5">
                 {budgetErrors.slice(0, 6).map(err => (
@@ -229,16 +236,7 @@ export default function CheckoutLines({
                     >
                       <span className="font-mono font-bold text-rose-600 dark:text-rose-400">#{err.lineNumber}</span>
                       <span className="font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[16rem]">{err.itemDescription}</span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {err.dists.map(d => {
-                          const prefix = err.dists.length > 1 || d.index > 0 ? `חלוקה ${d.index + 1}: ` : '';
-                          const parts = [
-                            d.missing.length > 0 ? `חסר ${d.missing.map(f => BUDGET_FIELD_LABELS[f]).join(', ')}` : null,
-                            ...(d.invalid || []).map(x => `${BUDGET_FIELD_LABELS[x.field]} לא תקין`)
-                          ].filter(Boolean);
-                          return prefix + parts.join(', ');
-                        }).join(' · ')}
-                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{err.labels.join(', ')}</span>
                     </button>
                   </li>
                 ))}
@@ -267,8 +265,9 @@ export default function CheckoutLines({
           onAddDist={onAddDist}
           onDistFieldChange={onDistFieldChange}
           onRemoveDist={onRemoveDist}
-          budgetError={showBudgetErrors ? budgetErrorsByLine[line.id] : null}
-          showBudgetErrors={showBudgetErrors}
+          lineMessages={lineMessages(line.id)}
+          distMessages={distMessages}
+          showValidation={showValidation}
         />
       ))}
 

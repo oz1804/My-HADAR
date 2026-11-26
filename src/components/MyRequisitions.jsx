@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { canDoAction, canCancelRequisition, canCancelRequisitionLine, activeLines } from '../hooks/useAppData';
+import { canDoAction, canCancelRequisition, canCancelRequisitionLine, activeLines, isAmendment } from '../hooks/useAppData';
 import { STATUS_META, STATUS_ORDER, ACTION_META, formatMoney, formatDate } from './Requisitions/requisitionUi';
 import { StatusBadge, Icon } from './Requisitions/RequisitionUiParts';
 import RequisitionDetails from './Requisitions/RequisitionDetails';
@@ -11,8 +11,8 @@ import { PoDocChip } from './PurchaseOrders/PoLinks';
 const ROW_ACTIONS = ['edit', 'copy', 'cancel', 'delete'];
 
 // כפתור אייקון קטן לפעולה בשורה
-function RowActionButton({ action, onClick, showLabel = false }) {
-  const meta = ACTION_META[action];
+function RowActionButton({ action, onClick, showLabel = false, req = null }) {
+  const meta = action === 'edit' && isAmendment(req) ? ACTION_META.amend : ACTION_META[action];
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
@@ -109,7 +109,7 @@ export default function MyRequisitions({
   // ניתוב פעולות - כולל טיפול בהתנגשות עם הסל
   // ==========================================
   // האם הפעולה מוצגת בשורה של הרשימה (ביטול - רק לדרישה שאין לה הזמנות)
-  const isRowActionAllowed = (req, a) => (a === 'cancel' ? canCancelRequisition(req) : canDoAction(req.status, a));
+  const isRowActionAllowed = (req, a) => (a === 'cancel' ? canCancelRequisition(req) : canDoAction(req, a));
 
   const handleAction = (action, req, line = null) => {
     if (action === 'view') { setSelectedId(req.id); return; }
@@ -302,7 +302,7 @@ export default function MyRequisitions({
                           <td className="px-3 py-2">
                             <div className="flex items-center justify-end gap-0.5">
                               {ROW_ACTIONS.filter(a => isRowActionAllowed(req, a)).map(a => (
-                                <RowActionButton key={a} action={a} onClick={() => handleAction(a, req)} />
+                                <RowActionButton key={a} action={a} req={req} onClick={() => handleAction(a, req)} />
                               ))}
                               <Icon name="chevronLeft" className="w-4 h-4 text-gray-300 dark:text-gray-600 ms-1 group-hover:text-blue-500 transition-colors" strokeWidth={2.5} />
                             </div>
@@ -343,7 +343,7 @@ export default function MyRequisitions({
                       </div>
                       <div className="flex flex-wrap items-center gap-1 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 -mx-1">
                         {ROW_ACTIONS.filter(a => isRowActionAllowed(req, a)).map(a => (
-                          <RowActionButton key={a} action={a} showLabel onClick={() => handleAction(a, req)} />
+                          <RowActionButton key={a} action={a} req={req} showLabel onClick={() => handleAction(a, req)} />
                         ))}
                       </div>
                     </div>

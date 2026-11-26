@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import NavbarLogo from './NavbarLogo';
 import NavOrg from './NavOrg';
 import NavSearch from './NavSearch';
-import NavNikraLink from './NavNikraLink';
+import NavTools from './Tools/NavTools';
 import NavNonCatalogBtn from './NavNonCatalogBtn';
 import NavUserReq from './NavUserReq';
 import NavApprovals from './NavApprovals';
@@ -20,6 +20,8 @@ export default function Navbar({
   onNavigate,
   cartLines,      
   onUpdateQty,    
+  editingRequisition = null,   // הדרישה שבעריכה (מוצגת בסל)
+  lockedLines = [],            // שורות שאושרו בדרישה שהוחזרה - מוצגות בסל לקריאה בלבד
   globalOrg,      
   setGlobalOrg,
   globalDestType,      
@@ -79,8 +81,9 @@ export default function Navbar({
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2 lg:gap-4 shrink-0">
+            {/* כלים: בדיקת פרויקטים, סטטוס פריט ב-ERP וניקר"ה (מתחת ל-lg - בתפריט) */}
             <div className="hidden lg:block shrink-0">
-              <NavNikraLink />
+              <NavTools onNavigate={handleNavigate} />
             </div>
 
             <div className="hidden lg:block w-px h-6 bg-gray-200 dark:bg-gray-700 shrink-0"></div>
@@ -91,6 +94,8 @@ export default function Navbar({
 
             <NavCart 
               cartLines={cartLines} 
+              editingRequisition={editingRequisition}
+              lockedLines={lockedLines}
               onUpdateQty={onUpdateQty} 
               onNavigate={handleNavigate} 
             />
@@ -152,9 +157,6 @@ export default function Navbar({
                 </div>
               </div>
 
-              <div className="lg:hidden flex flex-col items-start gap-4 pt-2">
-                <NavNikraLink />
-              </div>
             </div>
 
             <div className="flex flex-col items-start gap-4">
@@ -171,6 +173,9 @@ export default function Navbar({
                 <span className="underline-offset-4 group-hover:underline whitespace-nowrap">פריט ללא מק"ט</span>
               </button>
               <KnowledgeAndProcDocs onNavigate={handleNavigate} />
+              <div className="lg:hidden w-full">
+                <NavTools variant="menu" onNavigate={handleNavigate} />
+              </div>
             </div>
 
           </div>

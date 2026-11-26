@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import data from '../../data/data.json';
-import BudgetLovFields, { BudgetErrorBox } from './BudgetLovFields';
-import { getInvalidDistFields } from '../../utils/budgetValidation';
+import BudgetLovFields from './BudgetLovFields';
+import { getBudgetMessages } from '../../utils/budgetValidation';
+import { runScreen, visibleMessages, messagesFor, hasBlocking } from '../../utils/validationEngine';
+import { quickAddContext } from '../../utils/validationScreens';
+import { useValidationRules } from '../../hooks/validationRulesContext';
+import { FieldLabelRow, FieldMessageBelow, FieldMessageSide } from '../Validation/FieldMessage';
+import { fieldToneClass, focusFirstBlocking } from '../Validation/fieldTone';
 
 export default function QuickAddForm({
   onAddNewLine,
@@ -64,9 +69,11 @@ export default function QuickAddForm({
   // אתחול מחסן מברירת המחדל הגלובלית רק אם היעד הוא מלאי
   const [quickSubInv, setQuickSubInv] = useState((initialDest === 'Inventory' && globalSubInv) ? globalSubInv : ''); 
 
-  // הודעות שגיאה וסימון שדות אלגנטי
+  // הודעת סיכום כשהוספת השורה נחסמה; ההודעות עצמן מוצגות ליד השדות (ולידציות "הוספה מהירה")
   const [errorMessage, setErrorMessage] = useState('');
-  const [invalidFields, setInvalidFields] = useState([]);
+  const [attempted, setAttempted] = useState(false);
+  const formRef = useRef(null);
+  const rules = useValidationRules();
 
   // --- אתחול חלוקה תקציבית עם ערכי הכותרת או הערכים הגלובליים ---
   const [quickDists, setQuickDists] = useState([{
@@ -187,10 +194,7 @@ export default function QuickAddForm({
     handleQuickUomChange('EA');
   };
 
-  const clearError = (field) => {
-    setErrorMessage('');
-    if (invalidFields.includes(field)) setInvalidFields(prev => prev.filter(f => f !== field));
-  };
+  const clearError = () => setErrorMessage('');
 
   const handleQuickQtyChange = (newQtyStr) => {
     const newQty = Number(newQtyStr) || 0;
@@ -249,38 +253,24 @@ export default function QuickAddForm({
     });
   };
 
+  // --- ולידציות המסך (מוגדרות במסך ניהול המערכת) ---
+  const allMessages = runScreen('QUICK_ADD', quickAddContext({
+    itemId: quickItem?.id, description: quickItem ? quickItem.description : quickDesc,
+    quantity: quickQty, uom: quickUom, unitPrice: quickPrice, needByDate: quickNeedBy, lineType: quickLineType,
+    destinationType: quickDest, inventoryOrg: quickOrg, subInventory: quickSubInv, currency: quickCurrency, rate: quickRate,
+    requester: quickRequester, serviceApprover: quickApprover, buyer: quickBuyer, distributions: quickDists
+  }), rules);
+  const messages = visibleMessages(allMessages, attempted);
+  const qm = (field) => messagesFor(messages, field);
+
   const validateForm = () => {
-    let missing = [];
-    if (!quickItem && !quickDesc.trim()) missing.push('quickDesc');
-    if (Number(quickQty) <= 0) missing.push('quickQty');
-    
-    // ארגון מלאי חובה
-    if (!quickOrg) missing.push('quickOrg');
-    
-    if (quickLineType === 'שירות' && !String(quickApprover).trim()) missing.push('quickApprover');
-
-    const totalPct = quickDists.reduce((sum, d) => sum + (Number(d.percentage) || 0), 0);
-    if (Math.abs(totalPct - 100) > 0.01) {
-      setErrorMessage('שגיאה: סך האחוזים בחלוקה התקציבית לשורה חייב להיות בדיוק 100%');
+    setAttempted(true);
+    if (hasBlocking(allMessages)) {
+      setErrorMessage('יש לתקן את השדות המסומנים לפני הוספת השורה.');
+      focusFirstBlocking(formRef.current || document);
       return false;
     }
-
-    if (quickUom === 'EA') {
-      const hasDecimal = quickDists.some(d => Math.abs(d.quantity - Math.round(d.quantity)) > 0.001);
-      if (hasDecimal) {
-        setErrorMessage('שגיאה: פיצול ליחידת מידה (EA) דורש כמויות שלמות בחלוקת התקציב.');
-        return false;
-      }
-    }
-
-    if (missing.length > 0) {
-      setInvalidFields(missing);
-      setErrorMessage('אנא השלם את שדות החובה המסומנים באדום.');
-      return false;
-    }
-
     setErrorMessage('');
-    setInvalidFields([]);
     return true;
   };
 
@@ -318,12 +308,12 @@ export default function QuickAddForm({
     setQuickPrice('');
     setQuickLineType('טובין');
     setQuickSubInv('');
+    setAttempted(false);
     if (hasLines && onClose) onClose();
   };
 
 
   const quickInputClass = "w-full p-2.5 border border-emerald-200 dark:border-emerald-800/50 rounded-lg bg-white dark:bg-gray-800 text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all disabled:bg-gray-100 disabled:dark:bg-gray-900/50 disabled:text-gray-500";
-  const errorInputClass = "border-red-500 bg-red-50 dark:bg-red-900/10 ring-1 ring-red-500 focus:ring-red-500";
   const quickLabelClass = "block text-[10px] font-bold text-emerald-800/80 dark:text-emerald-300/80 mb-1 uppercase tracking-wider";
 
   const activeQuickOrg = quickOrg || '';
@@ -331,7 +321,7 @@ export default function QuickAddForm({
 
 
   return (
-    <div className="bg-gradient-to-l from-emerald-50/50 to-white dark:from-emerald-900/10 dark:to-gray-800 rounded-2xl shadow-sm border-t-4 border-t-emerald-500 border-x border-b border-gray-100 dark:border-gray-700 p-6 mt-4 mb-4 animate-fade-in relative z-20 transition-all duration-300">
+    <div ref={formRef} className="bg-gradient-to-l from-emerald-50/50 to-white dark:from-emerald-900/10 dark:to-gray-800 rounded-2xl shadow-sm border-t-4 border-t-emerald-500 border-x border-b border-gray-100 dark:border-gray-700 p-6 mt-4 mb-4 animate-fade-in relative z-20 transition-all duration-300">
       
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
@@ -359,6 +349,23 @@ export default function QuickAddForm({
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
         
+        {/* סוג שורה ראשון: קובע אילו שדות רלוונטיים (למשל מאשר שירות) */}
+        <div className="md:col-span-2" data-validation-field="lineType">
+          <FieldLabelRow messages={qm('lineType')}>
+            <label className={quickLabelClass}>סוג שורה</label>
+          </FieldLabelRow>
+          <select 
+            value={quickLineType} 
+            onChange={(e) => { setQuickLineType(e.target.value); if (e.target.value === 'שירות' && !quickApprover) setQuickApprover(currentUser?.id || ''); }} 
+            disabled={!!quickItem}
+            className={`${quickInputClass} ${fieldToneClass(qm('lineType'))}`}
+          >
+            <option value="טובין">טובין</option>
+            <option value="שירות">שירות</option>
+          </select>
+          <FieldMessageBelow messages={qm('lineType')} />
+        </div>
+
         <div className="md:col-span-2 relative">
           <label className={quickLabelClass}>חיפוש מק"ט</label>
           <div className="relative">
@@ -389,48 +396,52 @@ export default function QuickAddForm({
           )}
         </div>
 
-        <div className="md:col-span-3">
-          <label className={quickLabelClass}>תיאור הפריט <span className="text-red-500">*</span></label>
-          <input type="text" value={quickDesc} onChange={(e) => { setQuickDesc(e.target.value); clearError('quickDesc'); }} disabled={!!quickItem} placeholder="תיאור הפריט..." className={`${quickInputClass} ${invalidFields.includes('quickDesc') ? errorInputClass : ''}`} />
+        <div className="md:col-span-3" data-validation-field="description">
+          <FieldLabelRow messages={qm('description')}>
+            <label className={quickLabelClass}>תיאור הפריט <span className="text-red-500">*</span></label>
+          </FieldLabelRow>
+          <input type="text" value={quickDesc} onChange={(e) => { setQuickDesc(e.target.value); clearError('quickDesc'); }} disabled={!!quickItem} placeholder="תיאור הפריט..." className={`${quickInputClass} ${fieldToneClass(qm('description'))}`} />
+          <FieldMessageBelow messages={qm('description')} />
         </div>
 
-        <div className="md:col-span-1">
-          <label className={quickLabelClass}>כמות <span className="text-red-500">*</span></label>
-          <input type="number" min="1" value={quickQty} onChange={(e) => handleQuickQtyChange(e.target.value)} className={`${quickInputClass} text-center font-bold font-mono ${invalidFields.includes('quickQty') ? errorInputClass : ''}`} />
+        <div className="md:col-span-1" data-validation-field="quantity">
+          <FieldLabelRow messages={qm('quantity')}>
+            <label className={quickLabelClass}>כמות <span className="text-red-500">*</span></label>
+          </FieldLabelRow>
+          <input type="number" min="1" value={quickQty} onChange={(e) => handleQuickQtyChange(e.target.value)} className={`${quickInputClass} text-center font-bold font-mono ${fieldToneClass(qm('quantity'))}`} />
+          <FieldMessageBelow messages={qm('quantity')} />
         </div>
 
-        <div className="md:col-span-1">
-          <label className={quickLabelClass}>יח' מידה</label>
-          <select value={quickUom} disabled={!!quickItem} onChange={(e) => handleQuickUomChange(e.target.value)} className={`${quickInputClass} font-mono`}>
+        <div className="md:col-span-1" data-validation-field="uom">
+          <FieldLabelRow messages={qm('uom')}>
+            <label className={quickLabelClass}>יח' מידה</label>
+          </FieldLabelRow>
+          <select value={quickUom} disabled={!!quickItem} onChange={(e) => handleQuickUomChange(e.target.value)} className={`${quickInputClass} font-mono ${fieldToneClass(qm('uom'))}`}>
             {data.uoms?.map(u => <option key={u.code} value={u.code}>{u.code}</option>)}
           </select>
+          <FieldMessageBelow messages={qm('uom')} />
         </div>
 
-        <div className="md:col-span-1">
-          <label className={quickLabelClass}>מחיר</label>
-          <input type="number" min="0" step="0.01" value={quickPrice} onChange={(e) => setQuickPrice(e.target.value)} disabled={quickItem?.price != null} placeholder="0.00" className={`${quickInputClass} text-center font-mono`} />
+        <div className="md:col-span-1" data-validation-field="unitPrice">
+          <FieldLabelRow messages={qm('unitPrice')}>
+            <label className={quickLabelClass}>מחיר</label>
+          </FieldLabelRow>
+          <input type="number" min="0" step="0.01" value={quickPrice} onChange={(e) => setQuickPrice(e.target.value)} disabled={quickItem?.price != null} placeholder="0.00" className={`${quickInputClass} text-center font-mono ${fieldToneClass(qm('unitPrice'))}`} />
+          <FieldMessageBelow messages={qm('unitPrice')} />
         </div>
 
-        <div className="md:col-span-2">
-          <label className={quickLabelClass}>תאריך נדרש</label>
-          <input type="date" value={quickNeedBy} onChange={(e) => setQuickNeedBy(e.target.value)} className={`${quickInputClass} font-mono`} />
+        <div className="md:col-span-2" data-validation-field="needByDate">
+          <FieldLabelRow messages={qm('needByDate')}>
+            <label className={quickLabelClass}>תאריך נדרש</label>
+          </FieldLabelRow>
+          <input type="date" value={quickNeedBy} onChange={(e) => setQuickNeedBy(e.target.value)} className={`${quickInputClass} font-mono ${fieldToneClass(qm('needByDate'))}`} />
+          <FieldMessageBelow messages={qm('needByDate')} />
         </div>
 
-        <div className="md:col-span-2">
-          <label className={quickLabelClass}>סוג שורה</label>
-          <select 
-            value={quickLineType} 
-            onChange={(e) => { setQuickLineType(e.target.value); if (e.target.value === 'שירות' && !quickApprover) setQuickApprover(currentUser?.id || ''); }} 
-            disabled={!!quickItem}
-            className={quickInputClass}
-          >
-            <option value="טובין">טובין</option>
-            <option value="שירות">שירות</option>
-          </select>
-        </div>
-
-        <div className="md:col-span-2">
-          <label className={quickLabelClass}>יעד דרישה</label>
+        <div className="md:col-span-2" data-validation-field="destinationType">
+          <FieldLabelRow messages={qm('destinationType')}>
+            <label className={quickLabelClass}>יעד דרישה</label>
+          </FieldLabelRow>
           <select 
             value={quickDest} 
             onChange={(e) => {
@@ -450,50 +461,58 @@ export default function QuickAddForm({
                 }
             }} 
             disabled={quickLineType === 'שירות'} 
-            className={`${quickInputClass} ${quickLineType === 'שירות' ? 'cursor-not-allowed opacity-70' : ''}`}
+            className={`${quickInputClass} ${quickLineType === 'שירות' ? 'cursor-not-allowed opacity-70' : ''} ${fieldToneClass(qm('destinationType'))}`}
           >
             <option value="Inventory">מלאי (Inventory)</option>
             <option value="Expense">הוצאה (Expense)</option>
           </select>
+          <FieldMessageBelow messages={qm('destinationType')} />
         </div>
 
         {/* שדה ארגון מלאי הפך לחובה תמיד, מבוטל ממנו ה-disabled */}
-        <div className="md:col-span-2">
-          <label className={`${quickLabelClass} ${invalidFields.includes('quickOrg') ? 'text-red-500' : ''}`}>ארגון מלאי <span className="text-red-500">*</span></label>
-          <select value={quickOrg} onChange={(e) => { setQuickOrg(e.target.value); clearError('quickOrg'); }} className={`${quickInputClass} ${invalidFields.includes('quickOrg') ? errorInputClass : ''}`}>
+        <div className="md:col-span-2" data-validation-field="inventoryOrg">
+          <FieldLabelRow messages={qm('inventoryOrg')}>
+            <label className={quickLabelClass}>ארגון מלאי <span className="text-red-500">*</span></label>
+          </FieldLabelRow>
+          <select value={quickOrg} onChange={(e) => { setQuickOrg(e.target.value); clearError('quickOrg'); }} className={`${quickInputClass} ${fieldToneClass(qm('inventoryOrg'))}`}>
             <option value="">בחר ארגון...</option>
             {data.inventoryOrganizations?.map(org => <option key={org.id} value={org.id}>{org.code} - {org.name}</option>)}
           </select>
+          <FieldMessageBelow messages={qm('inventoryOrg')} />
         </div>
 
         {/* שדה מחסן מוצג *אך ורק* אם יעד הדרישה הוא מלאי */}
         {quickDest === 'Inventory' && (
-          <div className="md:col-span-2 animate-fade-in">
-            <label className={`${quickLabelClass} ${invalidFields.includes('quickSubInv') ? 'text-red-500' : ''}`}>
-              מחסן (Sub-Inv)
-            </label>
+          <div className="md:col-span-2 animate-fade-in" data-validation-field="subInventory">
+            <FieldLabelRow messages={qm('subInventory')}>
+              <label className={quickLabelClass}>מחסן (Sub-Inv)</label>
+            </FieldLabelRow>
             <select 
               value={quickSubInv} 
               onChange={(e) => { setQuickSubInv(e.target.value); clearError('quickSubInv'); }} 
               disabled={!quickOrg} 
-              className={`${quickInputClass} ${invalidFields.includes('quickSubInv') ? errorInputClass : ''} ${!quickOrg ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`${quickInputClass} ${!quickOrg ? 'opacity-50 cursor-not-allowed' : ''} ${fieldToneClass(qm('subInventory'))}`}
             >
               <option value="">בחר מחסן...</option>
               {data.subInventories?.filter(s => String(s.inventoryOrgId) === String(quickOrg)).map(sub => (
                 <option key={sub.id} value={sub.code}>{sub.name} ({sub.code})</option>
               ))}
             </select>
+            <FieldMessageBelow messages={qm('subInventory')} />
           </div>
         )}
 
         {/* -- תצוגת הכספים המאוחדת -- */}
-        <div className="md:col-span-1">
-          <label className={quickLabelClass}>מטבע</label>
-          <select value={quickCurrency} onChange={(e) => setQuickCurrency(e.target.value)} className={`${quickInputClass} font-mono`}>
+        <div className="md:col-span-1" data-validation-field="currency">
+          <FieldLabelRow messages={qm('currency')}>
+            <label className={quickLabelClass}>מטבע</label>
+          </FieldLabelRow>
+          <select value={quickCurrency} onChange={(e) => setQuickCurrency(e.target.value)} className={`${quickInputClass} font-mono ${fieldToneClass(qm('currency'))}`}>
             <option value="ILS">ILS</option>
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
           </select>
+          <FieldMessageBelow messages={qm('currency')} />
         </div>
         <div className="md:col-span-2">
           <label className={quickLabelClass}>תאריך שערוך</label>
@@ -520,34 +539,47 @@ export default function QuickAddForm({
           </select>
         </div>
 
-        <div className="md:col-span-3">
-          <label className={quickLabelClass}>מזמין</label>
-          <select value={quickRequester} onChange={(e) => setQuickRequester(e.target.value)} className={quickInputClass}>
+        <div className="md:col-span-3" data-validation-field="requester">
+          <FieldLabelRow messages={qm('requester')}>
+            <label className={quickLabelClass}>מזמין</label>
+          </FieldLabelRow>
+          <select value={quickRequester} onChange={(e) => setQuickRequester(e.target.value)} className={`${quickInputClass} ${fieldToneClass(qm('requester'))}`}>
             <option value="">לא הוגדר</option>
             {data.users?.map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
           </select>
+          <FieldMessageBelow messages={qm('requester')} />
         </div>
-        <div className="md:col-span-3">
-          <label className={`${quickLabelClass} ${invalidFields.includes('quickApprover') ? 'text-red-500' : ''}`}>מאשר שירות {quickLineType === 'שירות' && <span className="text-red-500">*</span>}</label>
-          <select value={quickApprover} onChange={(e) => { setQuickApprover(e.target.value); clearError('quickApprover'); }} className={`${quickInputClass} ${invalidFields.includes('quickApprover') ? errorInputClass : ''}`}>
+        <div className="md:col-span-3" data-validation-field="serviceApprover">
+          <FieldLabelRow messages={qm('serviceApprover')}>
+            <label className={quickLabelClass}>מאשר שירות {quickLineType === 'שירות' && <span className="text-red-500">*</span>}</label>
+          </FieldLabelRow>
+          <select value={quickApprover} onChange={(e) => { setQuickApprover(e.target.value); clearError('quickApprover'); }} className={`${quickInputClass} ${fieldToneClass(qm('serviceApprover'))}`}>
             <option value="">לא הוגדר</option>
             {data.users?.map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
           </select>
+          <FieldMessageBelow messages={qm('serviceApprover')} />
         </div>
-        <div className="md:col-span-3">
-          <label className={quickLabelClass}>קניין מומלץ</label>
-          <select value={quickBuyer} onChange={(e) => setQuickBuyer(e.target.value)} className={quickInputClass}>
+        <div className="md:col-span-3" data-validation-field="buyer">
+          <FieldLabelRow messages={qm('buyer')}>
+            <label className={quickLabelClass}>קניין מומלץ</label>
+          </FieldLabelRow>
+          <select value={quickBuyer} onChange={(e) => setQuickBuyer(e.target.value)} className={`${quickInputClass} ${fieldToneClass(qm('buyer'))}`}>
             <option value="">לא הוגדר</option>
             {data.buyers?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          <FieldMessageBelow messages={qm('buyer')} />
         </div>
 
         <div className="md:col-span-12 mt-4 pt-4 border-t border-emerald-200/60 dark:border-gray-700/50">
-           <h5 className="font-extrabold text-sm text-emerald-800 dark:text-emerald-300 mb-3">חלוקה תקציבית (לשורה החדשה)</h5>
+           <div className="flex items-center gap-3 mb-3" data-validation-field="distributions">
+             <h5 className="font-extrabold text-sm text-emerald-800 dark:text-emerald-300">חלוקה תקציבית (לשורה החדשה)</h5>
+             <FieldMessageSide messages={qm('distributions')} />
+           </div>
+           <FieldMessageBelow messages={qm('distributions')} className="-mt-1 mb-3" />
            
            {quickDists.map((dist, idx) => {
              // בדיקת החלוקה מול ה-LOV לפי היעד והארגון של השורה החדשה
-             const distErrors = getInvalidDistFields({ destinationType: quickDest, inventoryOrg: activeQuickOrg }, dist);
+             const distMessages = getBudgetMessages(rules, { destinationType: quickDest, inventoryOrg: activeQuickOrg }, dist);
              const commitQuickLov = (field, { value, text }) => {
                handleQuickDistFieldChange(dist.id, field, value === '' ? '' : Number(value));
                const nextText = { ...(dist.lovText || {}) };
@@ -577,7 +609,7 @@ export default function QuickAddForm({
                        orgIds={activeQuickOrg ? [activeQuickOrg] : []}
                        isInventory={quickIsInventory}
                        onCommit={commitQuickLov}
-                       badFields={distErrors.map(e => e.field)}
+                       messages={distMessages}
                        labelClassName={quickLabelClass}
                      />
                    </div>
@@ -588,7 +620,6 @@ export default function QuickAddForm({
                      </button>
                    )}
                  </div>
-                 <BudgetErrorBox errors={distErrors} />
                </div>
              );
            })}

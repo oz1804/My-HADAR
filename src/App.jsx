@@ -20,6 +20,8 @@ import NonCatalogModal from './components/NonCatalogModal';
 import WelcomeModal from './components/WelcomeModal'; 
 import PendingApprovals from './components/PendingApprovals';
 import AdminConsole from './components/Admin/AdminConsole';
+import ProjectCheck from './components/Tools/ProjectCheck';
+import ItemStatusCheck from './components/Tools/ItemStatusCheck';
 import { getUserRoles, hasRole, ADMIN_ROLE } from './services/umxService';
 
 function App() {
@@ -103,6 +105,8 @@ function App() {
         onNavigate={handleNavigate}
         cartLines={appData.cartLines} 
         onUpdateQty={appData.updateLineQty}
+        editingRequisition={appData.editingRequisition}
+        lockedLines={appData.editingLockedLines}
         
         globalOrg={appData.globalOrg} setGlobalOrg={appData.handleSetGlobalOrg} 
         globalDestType={appData.globalDestType} setGlobalDestType={appData.handleSetGlobalDestType} 
@@ -177,7 +181,7 @@ function App() {
         )}
 
         {currentView === 'admin' && isAdmin && (
-          <AdminConsole requisitions={appData.requisitions} onBackToHome={() => handleNavigate('home')} />
+          <AdminConsole requisitions={appData.requisitions} currentUser={currentUser} onBackToHome={() => handleNavigate('home')} />
         )}
 
         {currentView === 'purchase-order' && viewPayload && (
@@ -196,6 +200,14 @@ function App() {
         {currentView === 'user-guide' && <UserGuide onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'faq' && <FAQ onBackToHome={() => handleNavigate('home')} />}
         {currentView === 'proc-docs' && <ProcDocs onBackToHome={() => handleNavigate('home')} />}
+
+        {/* כלים */}
+        {currentView === 'project-check' && (
+          <ProjectCheck globalOrg={appData.globalOrg} initialProjectId={viewPayload} onBack={() => handleNavigate('home')} />
+        )}
+        {currentView === 'item-status' && (
+          <ItemStatusCheck globalOrg={appData.globalOrg} initialItemId={viewPayload} onOpenItem={(id) => handleNavigate('item-details', id)} onBack={() => handleNavigate('home')} />
+        )}
         
         {currentView === 'preferred-approvers' && (
           <PreferredApprovers currentUser={currentUser} showToast={showToast} onBackToHome={() => handleNavigate('home')} />
@@ -257,6 +269,9 @@ function App() {
             onRemoveFromCart={(id) => appData.updateLineQty(id, 0)} 
             nextRequisitionNumber={appData.nextRequisitionNumber}
             editingRequisitionId={appData.editingRequisitionId}
+            editingRequisition={appData.editingRequisition}
+            lockedLines={appData.editingLockedLines}
+            onCancelLockedLine={appData.cancelRequisitionLine}
             onAddLineToCart={appData.addCheckoutLine}
           />
         )}

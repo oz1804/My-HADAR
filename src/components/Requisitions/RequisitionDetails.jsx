@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { canDoAction, canCancelRequisition, canCancelRequisitionLine, isLineCancelled, activeLines } from '../../hooks/useAppData';
+import { canDoAction, canCancelRequisition, canCancelRequisitionLine, isLineCancelled, activeLines, isAmendment } from '../../hooks/useAppData';
 import { ACTION_META, formatMoney, formatDate, formatDateTime, currencySymbol, lookup } from './requisitionUi';
 import { StatusBadge, Icon } from './RequisitionUiParts';
 import { getPoLinkForReqLine, requisitionHasPo } from '../../utils/purchaseOrders';
@@ -7,6 +7,11 @@ import { PoLineLinkChip } from '../PurchaseOrders/PoLinks';
 import { normalizeSteps, getCurrentStage, stepRoleLabel } from '../../utils/approvalEngine';
 import { ACTION_CODES } from '../../utils/actionHistory';
 import data from '../../data/data.json';
+import { runScreen, visibleMessages, messagesFor, hasBlocking } from '../../utils/validationEngine';
+import { approvalDecisionContext } from '../../utils/validationScreens';
+import { useValidationRules } from '../../hooks/validationRulesContext';
+import { FieldLabelRow, FieldMessageBelow } from '../Validation/FieldMessage';
+import { fieldToneClass } from '../Validation/fieldTone';
 
 const userName = (id) => {
   const u = data.users.find(x => String(x.id) === String(id));
@@ -69,7 +74,7 @@ function RequisitionLine({ req, line, isOpen, onToggle, onOpenDoc, onCancelLine 
   const isCancelled = isLineCancelled(line);
   const canCancel = canCancelRequisitionLine(req, line);
   // שורה בדרישה מאושרת / שהוחזרה שעדיין אין לה הזמנה - ממתינה בתור הקניין
-  const isAwaitingPo = !poLink && !isCancelled && canDoAction(req.status, 'cancel');
+  const isAwaitingPo = !poLink && !isCancelled && canDoAction(req, 'cancel');
 
   return (
     <div className={`rounded-2xl border transition-colors ${isCancelled ? 'opacity-70 ' : ''}${isOpen ? 'border-blue-200 dark:border-blue-800/60 bg-blue-50/30 dark:bg-blue-900/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800/40 hover:border-gray-200 dark:hover:border-gray-600'}`}>
@@ -241,7 +246,7 @@ const AVATAR = {
   buyer: 'from-purple-100 to-pink-100 dark:from-purple-900/40 dark:to-pink-900/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/50'
 };
 const LABEL = { manual: 'text-indigo-600 dark:text-indigo-400', rule: 'text-teal-600 dark:text-teal-400', buyer: 'text-purple-600 dark:text-purple-400' };
-const stepTone = (step) => (step.source === 'RULE' ? 'rule' : step.source === 'BUYER' || String(step.id || '').startsWith('buyer-') ? 'buyer' : 'manual');
+const stepTone = (step) => (step.source === 'RULE' || step.source === 'KEY_MEMBER' ? 'rule' : step.source === 'BUYER' || String(step.id || '').startsWith('buyer-') ? 'buyer' : 'manual');
 
 const reasonText = (r) => {
   const lines = r.lineNumbers?.length ? `${r.lineNumbers.length > 1 ? 'שורות' : 'שורה'} ${[...r.lineNumbers].sort((a, b) => a - b).join(', ')}` : '';
@@ -366,12 +371,18 @@ function ActionHistory({ history }) {
 // ==========================================
 // לוח החלטה למאשר (אישור / דחייה + הערה)
 // ==========================================
-function ApprovalPanel({ steps, onApprove, onReject }) {
+function ApprovalPanel({ steps, onApprove, onReject, requisition }) {
   const [note, setNote] = useState('');
-  const [error, setError] = useState('');
-  const handleReject = () => {
-    if (!note.trim()) { setError('בדחייה יש לכתוב את הסיבה בהערה'); return; }
-    onReject(note.trim());
+  // ולידציות "אישור או דחייה של דרישה" - נבדקות לפי ההחלטה שנבחרה
+  const rules = useValidationRules();
+  const [attemptedDecision, setAttemptedDecision] = useState(null);
+  const evaluate = (decision) => runScreen('APPROVAL_DECISION', approvalDecisionContext({ decision, note, requisition }), rules);
+  const messages = attemptedDecision ? evaluate(attemptedDecision) : visibleMessages(evaluate(''), false);
+  const noteMessages = messagesFor(messages, 'note');
+  const decide = (decision, handler) => {
+    setAttemptedDecision(decision);
+    if (hasBlocking(evaluate(decision))) return;
+    handler(note.trim());
   };
   return (
     <div className="mt-6 p-4 sm:p-5 rounded-2xl bg-blue-50/60 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50" data-testid="approval-panel">
@@ -380,22 +391,26 @@ function ApprovalPanel({ steps, onApprove, onReject }) {
         הדרישה ממתינה לאישורך
       </div>
       <p className="text-xs text-blue-800/80 dark:text-blue-200/80 mt-1">בתפקיד: {steps.map(stepRoleLabel).join(', ')}</p>
-      <label htmlFor="approval-note" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mt-4 mb-1.5">הערה {`(חובה בדחייה)`}</label>
-      <textarea
-        id="approval-note"
-        value={note}
-        onChange={(e) => { setNote(e.target.value); setError(''); }}
-        rows={2}
-        className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y"
-        placeholder="הערה למבקש ולמאשרים הבאים..."
-      />
-      {error && <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-1" role="alert">{error}</p>}
+      <div data-validation-field="note">
+        <FieldLabelRow messages={noteMessages} className="mt-4">
+          <label htmlFor="approval-note" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">הערה {`(חובה בדחייה)`}</label>
+        </FieldLabelRow>
+        <textarea
+          id="approval-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y ${fieldToneClass(noteMessages)}`}
+          placeholder="הערה למבקש ולמאשרים הבאים..."
+        />
+        <FieldMessageBelow messages={noteMessages} />
+      </div>
       <div className="flex flex-wrap gap-2 mt-3">
-        <button onClick={() => onApprove(note.trim())} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/20 transition-colors cursor-pointer">
+        <button onClick={() => decide('APPROVE', onApprove)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/20 transition-colors cursor-pointer">
           <Icon name="check" className="w-4 h-4" strokeWidth={3} />
           אישור
         </button>
-        <button onClick={handleReject} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:text-red-300 transition-colors cursor-pointer">
+        <button onClick={() => decide('REJECT', onReject)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:text-red-300 transition-colors cursor-pointer">
           <Icon name="x" className="w-4 h-4" strokeWidth={3} />
           דחייה
         </button>
@@ -414,9 +429,9 @@ export default function RequisitionDetails({ requisition: req, isEditing, onActi
   const allOpen = lines.length > 0 && openLines.length === lines.length;
   const header = req.header || {};
   // ביטול הדרישה כולה - רק אם אף שורה שלה לא מקושרת להזמנה
-  const cancelBlockedByPo = !approval && canDoAction(req.status, 'cancel') && requisitionHasPo(req);
+  const cancelBlockedByPo = !approval && canDoAction(req, 'cancel') && requisitionHasPo(req);
   const isApproverView = !!approval;
-  const availableActions = isApproverView ? [] : DETAIL_ACTIONS.filter(a => (a.action === 'cancel' ? canCancelRequisition(req) : canDoAction(req.status, a.action)));
+  const availableActions = isApproverView ? [] : DETAIL_ACTIONS.filter(a => (a.action === 'cancel' ? canCancelRequisition(req) : canDoAction(req, a.action)));
   const cancelledCount = lines.filter(isLineCancelled).length;
 
   const toggleLine = (id) => setOpenLines(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
@@ -443,6 +458,16 @@ export default function RequisitionDetails({ requisition: req, isEditing, onActi
             {req.description || 'ללא תיאור'}
           </p>
           {isApproverView && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">מבקש: <span className="font-bold text-gray-700 dark:text-gray-200">{userName(req.creatorId) || '—'}</span></p>}
+          {req.status === 'RETURNED' && req.returnReason && (
+            <p className="mt-3 max-w-xl p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/50 text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+              <span className="font-black">סיבת ההחזרה מהקניין: </span>{req.returnReason}
+            </p>
+          )}
+          {isAmendment(req) && !isApproverView && ['RETURNED', 'REJECTED'].includes(req.status) && (
+            <p className="mt-2 max-w-xl text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+              הדרישה אושרה ולכן אי אפשר למחוק אותה או לערוך את השורות שאושרו. אפשר לבטל שורה שלא מקושרת להזמנה ולהוסיף שורות חדשות; הדרישה תעבור סבב אישורים מחדש.
+            </p>
+          )}
         </div>
 
         {(availableActions.length > 0 || cancelBlockedByPo) && (
@@ -455,7 +480,7 @@ export default function RequisitionDetails({ requisition: req, isEditing, onActi
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-colors cursor-pointer ${className}`}
                 >
                   <Icon name={ACTION_META[action].icon} className="w-4 h-4" />
-                  {ACTION_META[action].label}
+                  {(action === 'edit' && isAmendment(req) ? ACTION_META.amend : ACTION_META[action]).label}
                 </button>
               ))}
               {cancelBlockedByPo && (
@@ -480,7 +505,7 @@ export default function RequisitionDetails({ requisition: req, isEditing, onActi
       </div>
 
       {isApproverView && approval.steps.length > 0 && (
-        <ApprovalPanel steps={approval.steps} onApprove={approval.onApprove} onReject={approval.onReject} />
+        <ApprovalPanel steps={approval.steps} onApprove={approval.onApprove} onReject={approval.onReject} requisition={req} />
       )}
 
       {/* --- התראה: הדרישה פתוחה בסל --- */}

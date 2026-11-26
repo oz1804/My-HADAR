@@ -2,7 +2,12 @@ import React, { useState } from 'react';
 import DocumentsModal from './DocumentsModal';
 import data from '../../data/data.json';
 import LovCombobox from './LovCombobox';
-import { getInvalidDistFields, isPurchasingAllowed, BUDGET_SETUP_CONTACT } from '../../utils/budgetValidation';
+import { projectLovProps, taskLovProps } from '../../utils/lovFormat';
+import { getBudgetMessages, isPurchasingAllowed } from '../../utils/budgetValidation';
+import { messagesFor } from '../../utils/validationEngine';
+import { useValidationRules } from '../../hooks/validationRulesContext';
+import { FieldLabelRow, FieldMessageBelow } from '../Validation/FieldMessage';
+import { fieldToneClass } from '../Validation/fieldTone';
 
 export default function CheckoutHeader({ 
   cartTotal, 
@@ -33,7 +38,8 @@ export default function CheckoutHeader({
   onSaveRequestClick,
   onApprovalRoutingClick,
   onFundsCheckClick,
-  nextRequisitionNumber
+  nextRequisitionNumber,
+  headerMessages = []      // הודעות ולידציה של פרטי הדרישה (מסך "סל דרישה - פרטי הדרישה")
 }) {
   const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
 
@@ -54,12 +60,15 @@ export default function CheckoutHeader({
   const lovExpTypes = data.expenditureTypes?.filter(et => isItemActive(et) && (!selectedProject?.allowedExpenditureTypeIds || selectedProject.allowedExpenditureTypeIds.includes(et.id)));
   const lovExpOrgs = data.expenditureOrganizations?.filter(org => isItemActive(org) && isPurchasingAllowed(org));
 
-  // --- בדיקת תקציב הכותרת מול ה-LOV (אותה בדיקה כמו בשורות החלוקה) ---
-  const headerBudgetErrors = isBudgetMixed ? [] : getInvalidDistFields(
+  // --- בדיקת תקציב הכותרת מול ה-LOV (אותן ולידציות כמו בשורות החלוקה, רק המיידיות) ---
+  const rules = useValidationRules();
+  const headerBudgetMessages = isBudgetMixed ? [] : getBudgetMessages(
+    rules,
     { destinationType: hasExpenseLines ? 'Expense' : 'Inventory', inventoryOrg: headerOrgId },
     { projectId: headerProjectId, taskId: headerTaskId, expenditureTypeId: headerExpTypeId, expenditureOrgId: headerExpOrgId, lovText: headerLovText }
   );
-  const headerBadFields = headerBudgetErrors.map(e => e.field);
+  const bm = (field) => messagesFor(headerBudgetMessages, field);
+  const hm = (field) => messagesFor(headerMessages, field);
   const commitHeader = (field) => ({ value, text }) => onHeaderBudgetChange(field, value, text);
 
   return (
@@ -81,8 +90,10 @@ export default function CheckoutHeader({
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">ארגון מלאי</label>
+            <div className="md:col-span-2" data-validation-field="inventoryOrg">
+              <FieldLabelRow messages={hm('inventoryOrg')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">ארגון מלאי</label>
+              </FieldLabelRow>
               {headerOrg === 'mixed' ? (
                 <div className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm font-bold text-gray-500 border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
                   ארגוני מלאי שונים
@@ -91,7 +102,7 @@ export default function CheckoutHeader({
                 <select 
                   value={headerOrg}
                   onChange={(e) => onHeaderOrgChange(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                  className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none ${fieldToneClass(hm('inventoryOrg'))}`}
                 >
                   <option value="">בחר ארגון...</option>
                   {data.inventoryOrganizations?.map(org => (
@@ -99,10 +110,13 @@ export default function CheckoutHeader({
                   ))}
                 </select>
               )}
+              <FieldMessageBelow messages={hm('inventoryOrg')} />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מזמין</label>
+            <div data-validation-field="requester">
+              <FieldLabelRow messages={hm('requester')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מזמין</label>
+              </FieldLabelRow>
               {headerRequester === 'mixed' ? (
                 <div className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm font-bold text-gray-500 border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
                   מזמינים שונים
@@ -111,7 +125,7 @@ export default function CheckoutHeader({
                 <select 
                   value={headerRequester || ''}
                   onChange={(e) => onHeaderRequesterChange(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                  className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none ${fieldToneClass(hm('requester'))}`}
                 >
                   <option value="">בחר מזמין...</option>
                   {data.users?.map(u => (
@@ -119,10 +133,13 @@ export default function CheckoutHeader({
                   ))}
                 </select>
               )}
+              <FieldMessageBelow messages={hm('requester')} />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מאשר שירות</label>
+            <div data-validation-field="serviceApprover">
+              <FieldLabelRow messages={hm('serviceApprover')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מאשר שירות</label>
+              </FieldLabelRow>
               {headerServiceApprover === 'mixed' ? (
                 <div className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm font-bold text-gray-500 border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
                   מאשרי שירות שונים
@@ -131,7 +148,7 @@ export default function CheckoutHeader({
                 <select 
                   value={headerServiceApprover || ''}
                   onChange={(e) => onHeaderServiceApproverChange(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                  className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none ${fieldToneClass(hm('serviceApprover'))}`}
                 >
                   <option value="">בחר מאשר שירות...</option>
                   {data.users?.map(u => (
@@ -139,10 +156,13 @@ export default function CheckoutHeader({
                   ))}
                 </select>
               )}
+              <FieldMessageBelow messages={hm('serviceApprover')} />
             </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">קניין מומלץ</label>
+            <div className="md:col-span-2" data-validation-field="buyer">
+              <FieldLabelRow messages={hm('buyer')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">קניין מומלץ</label>
+              </FieldLabelRow>
               {headerBuyer === 'mixed' ? (
                 <div className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm font-bold text-gray-500 border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
                   קניינים שונים
@@ -151,7 +171,7 @@ export default function CheckoutHeader({
                 <select 
                   value={headerBuyer || ''}
                   onChange={(e) => onHeaderBuyerChange(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                  className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none ${fieldToneClass(hm('buyer'))}`}
                 >
                   <option value="">בחר קניין...</option>
                   {data.buyers?.map(b => (
@@ -159,27 +179,34 @@ export default function CheckoutHeader({
                   ))}
                 </select>
               )}
+              <FieldMessageBelow messages={hm('buyer')} />
             </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">הערות לקניין</label>
+            <div className="md:col-span-2" data-validation-field="buyerNotes">
+              <FieldLabelRow messages={hm('buyerNotes')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">הערות לקניין</label>
+              </FieldLabelRow>
               <textarea 
                 rows="2"
                 value={buyerNotes}
                 onChange={(e) => onHeaderNotesChange(e.target.value)}
                 placeholder="הערות שיחלחלו לשורות..."
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none resize-none"
+                className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none resize-none ${fieldToneClass(hm('buyerNotes'))}`}
               ></textarea>
+              <FieldMessageBelow messages={hm('buyerNotes')} />
             </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">הצדקה</label>
+            <div className="md:col-span-2" data-validation-field="justification">
+              <FieldLabelRow messages={hm('justification')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">הצדקה</label>
+              </FieldLabelRow>
               <textarea 
                 rows="2"
                 value={justification}
                 onChange={(e) => onHeaderJustificationChange(e.target.value)}
                 placeholder="הצדקה לביצוע הרכש..."
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none resize-none"
+                className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none resize-none ${fieldToneClass(hm('justification'))}`}
               ></textarea>
+              <FieldMessageBelow messages={hm('justification')} />
             </div>
           </div>
         </div>
@@ -207,8 +234,10 @@ export default function CheckoutHeader({
               </div>
             ) : (
               <>
-                <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">פרויקט</label>
+                <div className="flex flex-col min-w-0" data-validation-field="projectId">
+                  <FieldLabelRow messages={bm('projectId')}>
+                    <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">פרויקט</label>
+                  </FieldLabelRow>
                   <LovCombobox
                     size="md"
                     ariaLabel="פרויקט (כותרת)"
@@ -216,17 +245,20 @@ export default function CheckoutHeader({
                     validItems={lovProjects}
                     value={headerProjectId}
                     text={headerLovText.projectId || ''}
-                    getCode={p => p.projectCode}
-                    getName={p => p.projectName}
+                    {...projectLovProps}
                     getDisplay={p => `${p.projectCode} - ${p.projectName}`}
                     onCommit={commitHeader('projectId')}
                     placeholder="הקלד פרויקט..."
-                    invalid={headerBadFields.includes('projectId')}
+                    invalid={bm('projectId').some(m => m.severity === 'ERROR')}
+                    toneClass={fieldToneClass(bm('projectId'))}
                   />
+                  <FieldMessageBelow messages={bm('projectId')} />
                 </div>
 
-                <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">משימה</label>
+                <div className="flex flex-col min-w-0" data-validation-field="taskId">
+                  <FieldLabelRow messages={bm('taskId')}>
+                    <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">משימה</label>
+                  </FieldLabelRow>
                   <LovCombobox
                     size="md"
                     ariaLabel="משימה (כותרת)"
@@ -234,20 +266,23 @@ export default function CheckoutHeader({
                     validItems={lovTasks}
                     value={headerTaskId}
                     text={headerLovText.taskId || ''}
-                    getCode={t => t.taskCode}
-                    getName={t => t.taskName}
+                    {...taskLovProps}
                     getDisplay={t => `${t.taskCode} - ${t.taskName}`}
                     prefer={t => String(t.projectId) === String(headerProjectId)}
                     onCommit={commitHeader('taskId')}
                     placeholder="הקלד משימה..."
-                    invalid={headerBadFields.includes('taskId')}
+                    invalid={bm('taskId').some(m => m.severity === 'ERROR')}
+                    toneClass={fieldToneClass(bm('taskId'))}
                   />
+                  <FieldMessageBelow messages={bm('taskId')} />
                 </div>
 
                 {hasExpenseLines && (
                   <>
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">סוג הוצאה</label>
+                    <div className="flex flex-col min-w-0" data-validation-field="expenditureTypeId">
+                      <FieldLabelRow messages={bm('expenditureTypeId')}>
+                        <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">סוג הוצאה</label>
+                      </FieldLabelRow>
                       <LovCombobox
                         size="md"
                         ariaLabel="סוג הוצאה (כותרת)"
@@ -260,12 +295,16 @@ export default function CheckoutHeader({
                         getDisplay={et => `${et.expenditureTypeCode} - ${et.name}`}
                         onCommit={commitHeader('expenditureTypeId')}
                         placeholder="הקלד סוג הוצאה..."
-                        invalid={headerBadFields.includes('expenditureTypeId')}
+                        invalid={bm('expenditureTypeId').some(m => m.severity === 'ERROR')}
+                        toneClass={fieldToneClass(bm('expenditureTypeId'))}
                       />
+                      <FieldMessageBelow messages={bm('expenditureTypeId')} />
                     </div>
 
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">יחידה מממנת</label>
+                    <div className="flex flex-col min-w-0" data-validation-field="expenditureOrgId">
+                      <FieldLabelRow messages={bm('expenditureOrgId')}>
+                        <label className="text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1.5">יחידה מממנת</label>
+                      </FieldLabelRow>
                       <LovCombobox
                         size="md"
                         ariaLabel="יחידה מממנת (כותרת)"
@@ -278,8 +317,10 @@ export default function CheckoutHeader({
                         getDisplay={o => o.name}
                         onCommit={commitHeader('expenditureOrgId')}
                         placeholder="הקלד יחידה מממנת..."
-                        invalid={headerBadFields.includes('expenditureOrgId')}
+                        invalid={bm('expenditureOrgId').some(m => m.severity === 'ERROR')}
+                        toneClass={fieldToneClass(bm('expenditureOrgId'))}
                       />
+                      <FieldMessageBelow messages={bm('expenditureOrgId')} />
                     </div>
                   </>
                 )}
@@ -287,20 +328,6 @@ export default function CheckoutHeader({
             )}
           </div>
 
-          {/* --- שגיאות בתקציב הכותרת (מחלחלות לכל השורות) --- */}
-          {headerBudgetErrors.length > 0 && (
-            <div role="alert" className="mt-4 flex items-start gap-2 p-3 rounded-xl border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-900/20">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-rose-500 shrink-0 mt-0.5">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-              </svg>
-              <div className="text-xs text-rose-700 dark:text-rose-300 min-w-0">
-                <ul className="space-y-0.5 font-semibold">
-                  {headerBudgetErrors.map(err => <li key={err.field}>{err.message}</li>)}
-                </ul>
-                {headerBudgetErrors.some(e => e.needsSetup) && <p className="mt-1 font-bold">{BUDGET_SETUP_CONTACT}</p>}
-              </div>
-            </div>
-          )}
           
         </div>
 
@@ -323,15 +350,18 @@ export default function CheckoutHeader({
               </span>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">תיאור דרישה</label>
+            <div data-validation-field="description">
+              <FieldLabelRow messages={hm('description')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">תיאור דרישה</label>
+              </FieldLabelRow>
               <input 
                 type="text" 
                 value={headerDescription}
                 onChange={(e) => setHeaderDescription(e.target.value)}
                 placeholder="הזן תיאור כללי לדרישה..."
-                className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none"
+                className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 transition-all outline-none ${fieldToneClass(hm('description'))}`}
               />
+              <FieldMessageBelow messages={hm('description')} />
             </div>
 
             <div className="pt-5 mt-2 border-t border-dashed border-gray-200 dark:border-gray-700">

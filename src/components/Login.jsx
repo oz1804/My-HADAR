@@ -1,23 +1,27 @@
 import React, { useState } from 'react';
 import usersData from '../data/data.json';
+import { runScreen, visibleMessages, messagesFor, hasBlocking } from '../utils/validationEngine';
+import { loginContext } from '../utils/validationScreens';
+import { useValidationRules } from '../hooks/validationRulesContext';
+import { FieldLabelRow, FieldMessageBelow } from './Validation/FieldMessage';
+import { fieldToneClass } from './Validation/fieldTone';
 
 export default function Login({ onLogin }) {
   const [username, setUsername] = useState('');
-  const [error, setError] = useState('');
+  // ולידציות מסך הכניסה (מוגדרות במסך ניהול המערכת)
+  const rules = useValidationRules();
+  const [attempted, setAttempted] = useState(false);
+  const allMessages = runScreen('LOGIN', loginContext({ username }), rules);
+  const usernameMessages = messagesFor(visibleMessages(allMessages, attempted), 'username');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+    setAttempted(true);
+    if (hasBlocking(allMessages)) return;
     const foundUser = usersData.users.find(
-      user => user.username.toLowerCase() === username.toLowerCase()
+      user => user.username.toLowerCase() === username.trim().toLowerCase()
     );
-
-    if (foundUser) {
-      setError('');
-      onLogin(foundUser);
-    } else {
-      setError('שם המשתמש אינו קיים במערכת');
-    }
+    if (foundUser) onLogin(foundUser);
   };
 
   return (
@@ -35,28 +39,24 @@ export default function Login({ onLogin }) {
         </div>
 
         <form className="space-y-6" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              שם משתמש
-            </label>
+          <div data-validation-field="username">
+            <FieldLabelRow messages={usernameMessages}>
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                שם משתמש
+              </label>
+            </FieldLabelRow>
             <input
               id="username"
               name="username"
               type="text"
-              required
               // הסרנו את ה-dir="ltr" והוספנו text-start שמוודא שהטקסט מתחיל מהצד הנכון
-              className="w-full px-4 py-3 text-start rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              className={`w-full px-4 py-3 text-start rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${fieldToneClass(usernameMessages)}`}
               placeholder="הזן את שם המשתמש באנגלית"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
+            <FieldMessageBelow messages={usernameMessages} />
           </div>
-
-          {error && (
-            <div className="text-red-600 dark:text-red-400 text-sm font-medium bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800 p-3 rounded-lg text-center transition-colors duration-200">
-              {error}
-            </div>
-          )}
 
           <button
             type="submit"

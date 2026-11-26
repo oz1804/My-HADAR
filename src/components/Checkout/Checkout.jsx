@@ -4,7 +4,12 @@ import CheckoutLines from './CheckoutLines';
 import useCheckout from './UseCheckout'; 
 import ApprovalRoutingDrawer from './ApprovalRoutingDrawer';
 import FundsCheckModal from './FundsCheckModal';
-import { validateBudgetForApproval } from '../../utils/budgetValidation';
+import { getValidationRules } from '../../services/validationService';
+import { validateCheckout, visibleMessages, messageText } from '../../utils/validationEngine';
+import { useValidationRules } from '../../hooks/validationRulesContext';
+import { focusFirstBlocking } from '../Validation/fieldTone';
+import { isAmendment } from '../../hooks/useAppData';
+import LockedLines from './LockedLines';
 
 export default function Checkout({ 
   cartLines = [], 
@@ -21,13 +26,17 @@ export default function Checkout({
   onRemoveFromCart, 
   nextRequisitionNumber, 
   editingRequisitionId = null,
+  editingRequisition = null,  // הדרישה שבעריכה (לכותרת, ולשורות הנעולות בדרישה שאושרה)
+  lockedLines = [],           // שורות שאושרו - לקריאה בלבד, נשלחות לסבב יחד עם השורות החדשות
+  onCancelLockedLine,
   onAddLineToCart 
 }) {
   
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isApprovalDrawerOpen, setIsApprovalDrawerOpen] = useState(false); 
   const [isFundsCheckOpen, setIsFundsCheckOpen] = useState(false);
-  const [showBudgetErrors, setShowBudgetErrors] = useState(false); // מוצג רק אחרי ניסיון העברה לסבב
+  const [amendNeedsLine, setAmendNeedsLine] = useState(false);
+  const [showValidation, setShowValidation] = useState(false);     // הודעות "בפעולה" מוצגות רק אחרי ניסיון העברה לסבב
   const [budgetFocusKey, setBudgetFocusKey] = useState(0);         // מסמן לרשימת השורות לקפוץ לשגיאה הראשונה
 
   const {
@@ -71,9 +80,14 @@ export default function Checkout({
     currentUser,
     globalProject, // <--- העברה פנימה לאתחול הכותרת
     globalTask,    // <--- העברה פנימה לאתחול הכותרת
+    initialHeader: editingRequisition?.header,
     globalExpType, // <--- העברה פנימה לאתחול הכותרת
     globalExpOrg   // <--- העברה פנימה לאתחול הכותרת
   });
+
+  // דרישה שאושרה והוחזרה מקניין: השורות המאושרות נעולות ונשלחות לסבב יחד עם השורות החדשות
+  const isAmend = isAmendment(editingRequisition);
+  const allLines = isAmend ? [...lockedLines, ...lines] : lines;
 
   const buildHeaderData = () => ({
     org: headerOrg,
@@ -95,14 +109,28 @@ export default function Checkout({
     setIsSaveModalOpen(false);
   };
 
-  // בדיקת סעיפים תקציביים - מתעדכנת בזמן אמת בזמן שהמשתמש מתקן
-  const budgetErrors = useMemo(() => validateBudgetForApproval(lines), [lines]);
+  // --- ולידציות (מוגדרות במסך ניהול המערכת): כותרת, שורות ושורות חלוקה. מתעדכנות בזמן אמת ---
+  const rules = useValidationRules();
+  const validationHeader = useMemo(() => ({
+    org: headerOrg, justification, description: headerDescription, buyerNotes,
+    requester: headerRequester, serviceApprover: headerServiceApprover, buyer: headerBuyer
+  }), [headerOrg, justification, headerDescription, buyerNotes, headerRequester, headerServiceApprover, headerBuyer]);
+  const validation = useMemo(() => validateCheckout({ rules, header: validationHeader, lines }), [rules, validationHeader, lines]);
+  const blockingMessages = validation.all.filter(m => m.severity === 'ERROR');
+  const headerMessages = visibleMessages(validation.header, showValidation);
 
-  // לחיצה על "העבר לסבב אישורים": אם חסר סעיף תקציבי - מציגים את השגיאות במקום לפתוח את המגירה
+  // לחיצה על "העבר לסבב אישורים": אם יש הודעה חוסמת - מציגים את ההודעות ליד השדות במקום לפתוח את המגירה
   const handleApprovalRoutingClick = () => {
-    if (budgetErrors.length > 0) {
-      setShowBudgetErrors(true);
-      setBudgetFocusKey(k => k + 1);
+    setShowValidation(true);
+    // דרישה שאושרה: חייבת שורה חדשה אחת לפחות כדי לחזור לסבב
+    if (isAmend && lines.length === 0) {
+      setAmendNeedsLine(true);
+      document.querySelector('[data-testid="amend-needs-line"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (blockingMessages.length > 0) {
+      if (blockingMessages.some(m => m.scope !== 'HEADER')) setBudgetFocusKey(k => k + 1);
+      else setTimeout(() => focusFirstBlocking(), 60);
       return;
     }
     setIsApprovalDrawerOpen(true);
@@ -110,12 +138,15 @@ export default function Checkout({
 
   // שליחה לאישור: מחזיר את תוצאת השמירה (כולל שגיאת שריון תקציב) כדי שהמגירה תציג אותה
   const handleApprovalSubmit = async (routingSteps) => {
-    if (validateBudgetForApproval(lines).length > 0) {
+    // הרצה חוזרת לפי ההגדרות העדכניות (כמו בדיקה בצד השרת)
+    const fresh = validateCheckout({ rules: await getValidationRules(), header: validationHeader, lines });
+    if (fresh.all.some(m => m.severity === 'ERROR')) {
       setIsApprovalDrawerOpen(false);
       handleApprovalRoutingClick();
-      return { ok: false, message: 'חסר סעיף תקציבי בחלק משורות החלוקה' };
+      return { ok: false, message: 'הדרישה לא עברה את בדיקות התקינות' };
     }
-    return onSubmit(buildHeaderData(), lines, true, routingSteps, 'IN PROCESS');
+    const validationWarnings = fresh.all.filter(m => m.severity === 'WARNING').map(messageText);
+    return onSubmit(buildHeaderData(), lines, true, routingSteps, 'IN PROCESS', { validationWarnings });
   };
 
   // --- הפתרון הקריטי! פונקציה שמעדכנת גם את הקופה וגם את ה-Navbar יחד ---
@@ -161,9 +192,20 @@ export default function Checkout({
         onApprovalRoutingClick={handleApprovalRoutingClick} 
         onFundsCheckClick={() => setIsFundsCheckOpen(true)}
         nextRequisitionNumber={nextRequisitionNumber} 
+        headerMessages={headerMessages}
       />
       
+      {isAmend && (
+        <LockedLines
+          requisition={editingRequisition}
+          lines={lockedLines}
+          onCancelLine={(line) => onCancelLockedLine?.(editingRequisition.id, line.id)}
+          showNeedsNewLine={amendNeedsLine && lines.length === 0}
+        />
+      )}
+
       <div className="mt-8">
+        {isAmend && <h2 className="text-base font-black text-gray-900 dark:text-white mb-3 px-1">שורות חדשות</h2>}
         <CheckoutLines 
           lines={lines}
           selectedLineIds={selectedLineIds}
@@ -176,8 +218,8 @@ export default function Checkout({
           onDistFieldChange={handleDistFieldChange}
           onRemoveDist={handleRemoveDist}
           onApplyBulkEdit={handleApplyBulkEdit}
-          budgetErrors={budgetErrors}
-          showBudgetErrors={showBudgetErrors}
+          validation={validation}
+          showValidation={showValidation}
           budgetFocusKey={budgetFocusKey}
           
           // ניתוב מחדש לפונקציה המשולבת שיצרנו!
@@ -206,7 +248,7 @@ export default function Checkout({
       {isSaveModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm animate-fade-in p-4">
           <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 transform transition-all border border-gray-100 dark:border-gray-700">
-            <h3 className="text-xl font-black text-center text-gray-900 dark:text-white mb-2">שמירת דרישת רכש (INCOMPLETE)</h3>
+            <h3 className="text-xl font-black text-center text-gray-900 dark:text-white mb-2">{isAmend ? 'שמירת השורות החדשות' : 'שמירת דרישת רכש (INCOMPLETE)'}</h3>
             <p className="text-center text-sm text-gray-500 dark:text-gray-400 mb-8">האם תרצה לרוקן את הסל לאחר השמירה?</p>
             <div className="flex flex-col gap-3">
               <button onClick={() => handleConfirmSave(true)} className="w-full py-3.5 px-4 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white rounded-xl font-bold transition-colors cursor-pointer border border-gray-200 dark:border-gray-600 shadow-sm">שמור דרישה ורוקן את הסל</button>
@@ -221,7 +263,8 @@ export default function Checkout({
         isOpen={isApprovalDrawerOpen}
         onClose={() => setIsApprovalDrawerOpen(false)}
         currentUser={currentUser}
-        lines={lines}
+        lines={allLines}
+        validationMessages={validation.all.filter(m => m.severity !== 'ERROR')}
         headerBuyer={headerBuyer}
         headerOrg={headerOrg}
         editingRequisitionId={editingRequisitionId}
@@ -231,9 +274,9 @@ export default function Checkout({
       {isFundsCheckOpen && <FundsCheckModal
         isOpen={isFundsCheckOpen}
         onClose={() => setIsFundsCheckOpen(false)}
-        lines={lines}
+        lines={allLines}
         editingRequisitionId={editingRequisitionId}
-        hasBudgetErrors={budgetErrors.length > 0}
+        hasBudgetErrors={blockingMessages.some(m => m.scope === 'DIST')}
       />}
 
     </div>

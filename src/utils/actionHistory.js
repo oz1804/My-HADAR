@@ -5,6 +5,7 @@
 export const ACTION_CODES = {
   CREATE: { label: 'יצירת דרישה', tone: 'gray' },
   SUBMIT: { label: 'הגשה לאישור', tone: 'blue' },
+  VALIDATION_WARNING: { label: 'הגשה עם אזהרות', tone: 'amber' },
   FUNDS_RESERVE: { label: 'שריון תקציב', tone: 'indigo' },
   APPROVE: { label: 'אישור', tone: 'emerald' },
   FINAL_APPROVE: { label: 'אישור סופי', tone: 'emerald' },

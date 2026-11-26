@@ -11,9 +11,12 @@ import '@fontsource/assistant/800.css';
 
 import './index.css'
 import App from './App.jsx'
+import ValidationRulesProvider from './components/Validation/ValidationRulesProvider'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <ValidationRulesProvider>
+      <App />
+    </ValidationRulesProvider>
   </StrictMode>,
 )

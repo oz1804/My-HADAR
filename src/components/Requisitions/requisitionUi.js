@@ -77,6 +77,8 @@ export const ICON_PATHS = {
 export const ACTION_META = {
   view:   { label: 'צפייה',  icon: 'view',   hover: 'hover:text-gray-900 hover:bg-gray-100 dark:hover:text-white dark:hover:bg-gray-700' },
   edit:   { label: 'עריכה',  icon: 'edit',   hover: 'hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-900/30' },
+  // "עריכה" של דרישה שאושרה: השורות המאושרות נעולות, אפשר רק להוסיף שורות (והדרישה עוברת סבב מחדש)
+  amend:  { label: 'הוספת שורות', icon: 'edit', hover: 'hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-900/30' },
   copy:   { label: 'העתקה לסל', icon: 'copy', hover: 'hover:text-indigo-600 hover:bg-indigo-50 dark:hover:text-indigo-400 dark:hover:bg-indigo-900/30' },
   cancel: { label: 'ביטול דרישה', icon: 'cancel', hover: 'hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-900/30' },
   delete: { label: 'מחיקה',  icon: 'delete', hover: 'hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/30' }

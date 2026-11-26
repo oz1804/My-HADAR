@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import data from '../data/data.json';
+import { runScreen, visibleMessages, messagesFor, hasBlocking } from '../utils/validationEngine';
+import { nonCatalogContext } from '../utils/validationScreens';
+import { useValidationRules } from '../hooks/validationRulesContext';
+import { FieldLabelRow, FieldMessageBelow } from './Validation/FieldMessage';
+import { fieldToneClass, focusFirstBlocking } from './Validation/fieldTone';
 
 export default function NonCatalogModal({ 
   isOpen, 
@@ -16,6 +21,9 @@ export default function NonCatalogModal({
   globalExpOrg     
 }) {
   
+  // --- שלב מקדים: מהות הפריט (טובין שמצריך קליטה / שירות) קובעת את סוג השורה ---
+  const [step, setStep] = useState('choose'); // 'choose' | 'form'
+
   // --- ניהול הסטייט (מצבי הטופס) ---
   const [requester, setRequester] = useState(currentUser?.id || '');
   const [lineType, setLineType] = useState('טובין');
@@ -43,17 +51,16 @@ export default function NonCatalogModal({
   
   const [isFavorite, setIsFavorite] = useState(false);
   
-  // ניהול הודעות שגיאה וסימון שדות חסרים
+  // הודעת סיכום כשהפעולה נחסמה; ההודעות עצמן מוצגות ליד השדות (ולידציות "פריט ללא מק"ט")
   const [errorMessage, setErrorMessage] = useState('');
-  const [invalidFields, setInvalidFields] = useState([]);
+  const [attempted, setAttempted] = useState(false);
+  const rules = useValidationRules();
 
   // --- לוגיקה אוטומטית: נעילת יעד דרישה כשנבחר "שירות" ---
   useEffect(() => {
     if (lineType === 'שירות') {
       setDestinationType('Expense');
       setSubInventory(''); // איפוס במעבר להוצאה
-    } else {
-      setInvalidFields(prev => prev.filter(f => f !== 'serviceApprover'));
     }
   }, [lineType]);
 
@@ -96,6 +103,7 @@ export default function NonCatalogModal({
   // איפוס הטופס והשגיאות כשסוגרים אותו
   useEffect(() => {
     if (!isOpen) {
+      setStep('choose');
       setLineType('טובין');
       setDescription('');
       setDestinationType(globalDestType || 'Expense');
@@ -111,36 +119,38 @@ export default function NonCatalogModal({
       setBuyer('');
       setIsFavorite(false); // איפוס מצב הלב
       setErrorMessage(''); 
-      setInvalidFields([]);
+      setAttempted(false);
     }
   }, [isOpen, globalDestType, globalSubInv]);
 
   if (!isOpen) return null;
 
-  const clearError = (fieldName) => {
+  const clearError = () => setErrorMessage('');
+
+  // בחירה במסך המקדים: סוג השורה נקבע לפיה (בשירות - יעד הוצאה נעול ומאשר שירות חובה, ב-useEffect למעלה)
+  const chooseKind = (kind) => {
+    setLineType(kind);
+    setAttempted(false);
     setErrorMessage('');
-    if (invalidFields.includes(fieldName)) {
-      setInvalidFields(prev => prev.filter(f => f !== fieldName));
-    }
+    setStep('form');
   };
 
-  const validateForm = () => {
-    let missing = [];
-    
-    if (!description.trim()) missing.push('description');
-    if (!quantity || Number(quantity) <= 0) missing.push('quantity');
-    if (!unitPrice || Number(unitPrice) < 0) missing.push('unitPrice');
-    if (!inventoryOrg) missing.push('inventoryOrg');
-    if (lineType === 'שירות' && !serviceApprover) missing.push('serviceApprover');
+  // --- ולידציות המסך (מוגדרות במסך ניהול המערכת) ---
+  const allMessages = runScreen('NON_CATALOG', nonCatalogContext({
+    lineType, requester, description, destinationType, inventoryOrg, subInventory, uom,
+    quantity, unitPrice, currency, exchangeDate, rate, serviceApprover, buyer
+  }), rules);
+  const messages = visibleMessages(allMessages, attempted);
+  const nm = (field) => messagesFor(messages, field);
 
-    if (missing.length > 0) {
-      setInvalidFields(missing);
-      setErrorMessage("אנא השלם את שדות החובה המסומנים באדום.");
+  const validateForm = () => {
+    setAttempted(true);
+    if (hasBlocking(allMessages)) {
+      setErrorMessage('יש לתקן את השדות המסומנים.');
+      focusFirstBlocking();
       return false;
     }
-    
     setErrorMessage('');
-    setInvalidFields([]);
     return true;
   };
 
@@ -215,6 +225,47 @@ export default function NonCatalogModal({
           </button>
         </div>
         
+        {step === 'choose' && (
+          <div className="p-6 sm:p-8" data-testid="noncat-kind-step">
+            <h4 className="text-lg font-black text-gray-900 dark:text-white">מה ברצונך להוסיף לסל?</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-6">הבחירה קובעת את סוג השורה ואת השדות שיידרשו בטופס.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" role="group" aria-label="מהות הפריט">
+              {[
+                {
+                  kind: 'טובין', title: 'טובין ללא מק"ט', tag: 'טובין (Goods)',
+                  text: 'פריט פיזי שיסופק ויחייב קליטה במחסן או אישור קבלה.',
+                  tone: 'blue',
+                  icon: 'M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9'
+                },
+                {
+                  kind: 'שירות', title: 'שירות', tag: 'שירות (Service)',
+                  text: 'עבודה או שירות. יעד הדרישה יהיה הוצאה, ויש לבחור מאשר שירות.',
+                  tone: 'emerald',
+                  icon: 'M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z'
+                }
+              ].map(o => (
+                <button
+                  key={o.kind}
+                  type="button"
+                  data-kind={o.kind}
+                  onClick={() => chooseKind(o.kind)}
+                  className={`group flex flex-col items-start text-start p-5 rounded-2xl border-2 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 ${o.tone === 'blue'
+                    ? 'border-blue-100 dark:border-blue-900/50 hover:border-blue-500 hover:bg-blue-50/60 dark:hover:bg-blue-900/20 focus-visible:ring-blue-500'
+                    : 'border-emerald-100 dark:border-emerald-900/50 hover:border-emerald-500 hover:bg-emerald-50/60 dark:hover:bg-emerald-900/20 focus-visible:ring-emerald-500'}`}
+                >
+                  <span className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${o.tone === 'blue' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300'}`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-6 h-6" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d={o.icon} /></svg>
+                  </span>
+                  <span className="block text-base font-black text-gray-900 dark:text-white">{o.title}</span>
+                  <span className="block text-sm text-gray-600 dark:text-gray-300 mt-1 leading-relaxed">{o.text}</span>
+                  <span className={`inline-block mt-3 text-[11px] font-bold px-2 py-0.5 rounded-md ${o.tone === 'blue' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'}`}>סוג שורה: {o.tag}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {step === 'form' && (<>
         {/* טופס */}
         <div className="p-6 overflow-y-auto max-h-[70vh] scrollbar-thin">
           
@@ -233,37 +284,52 @@ export default function NonCatalogModal({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">סוג השורה</label>
-              <select value={lineType} onChange={(e) => { setLineType(e.target.value); clearError('lineType'); }} className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none">
+            <div data-validation-field="lineType">
+              <FieldLabelRow messages={nm('lineType')}>
+                <label className="flex items-center gap-2 text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
+                  סוג השורה
+                  <button type="button" onClick={() => setStep('choose')} data-testid="noncat-change-kind" className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">שינוי</button>
+                </label>
+              </FieldLabelRow>
+              {/* נקבע במסך המקדים (מהות הפריט); לשינוי - "שינוי" */}
+              <select value={lineType} disabled aria-label="סוג השורה" onChange={(e) => { setLineType(e.target.value); clearError('lineType'); }} className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 cursor-not-allowed text-sm transition-all outline-none ${fieldToneClass(nm('lineType'))}`}>
                 <option value="טובין">טובין (Goods)</option>
                 <option value="שירות">שירות (Service)</option>
               </select>
+              <FieldMessageBelow messages={nm('lineType')} />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מזמין</label>
-              <select value={requester} onChange={(e) => setRequester(e.target.value)} className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none">
+            <div data-validation-field="requester">
+              <FieldLabelRow messages={nm('requester')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מזמין</label>
+              </FieldLabelRow>
+              <select value={requester} onChange={(e) => setRequester(e.target.value)} className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none ${fieldToneClass(nm('requester'))}`}>
                 {data.users?.map(u => (
                   <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                 ))}
               </select>
+              <FieldMessageBelow messages={nm('requester')} />
             </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">תיאור הפריט/השירות <span className="text-red-500">*</span></label>
+            <div className="md:col-span-2" data-validation-field="description">
+              <FieldLabelRow messages={nm('description')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">תיאור הפריט/השירות <span className="text-red-500">*</span></label>
+              </FieldLabelRow>
               <textarea 
                 rows="2" 
                 value={description} 
                 onChange={(e) => { setDescription(e.target.value); clearError('description'); }} 
                 placeholder="הזן תיאור מפורט ככל הניתן..." 
-                className={`w-full p-3 border rounded-xl text-sm transition-all outline-none resize-none ${invalidFields.includes('description') ? 'border-red-500 bg-red-50 dark:bg-red-900/10 ring-1 ring-red-500 focus:ring-2 focus:ring-red-500' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-blue-500'}`}
+                className={`w-full p-3 border rounded-xl text-sm transition-all outline-none resize-none border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-blue-500 ${fieldToneClass(nm('description'))}`}
               ></textarea>
+              <FieldMessageBelow messages={nm('description')} />
             </div>
 
             {/* בלוק יעד דרישה, ארגון מלאי ומחסן */}
             <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-5 p-4 bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl border border-gray-100 dark:border-gray-700/50">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">יעד הדרישה</label>
+              <div data-validation-field="destinationType">
+                <FieldLabelRow messages={nm('destinationType')}>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">יעד הדרישה</label>
+                </FieldLabelRow>
                 <select 
                   value={destinationType} 
                   onChange={(e) => {
@@ -274,74 +340,89 @@ export default function NonCatalogModal({
                     }
                   }} 
                   disabled={lineType === 'שירות'} 
-                  className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none ${lineType === 'שירות' ? 'bg-gray-200 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'}`}
+                  className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none ${lineType === 'שירות' ? 'bg-gray-200 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'} ${fieldToneClass(nm('destinationType'))}`}
                 >
                   <option value="Inventory">מלאי (Inventory)</option>
                   <option value="Expense">הוצאה (Expense)</option>
                 </select>
+                <FieldMessageBelow messages={nm('destinationType')} />
               </div>
 
               {/* ארגון מלאי תמיד פתוח לבחירה ותמיד חובה */}
-              <div>
-                <label className={`block text-xs font-bold mb-1.5 ${invalidFields.includes('inventoryOrg') ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
+              <div data-validation-field="inventoryOrg">
+                <FieldLabelRow messages={nm('inventoryOrg')}>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
                   ארגון מלאי <span className="text-red-500">*</span>
                 </label>
+                </FieldLabelRow>
                 <select 
                   value={inventoryOrg} 
                   onChange={(e) => { setInventoryOrg(e.target.value); clearError('inventoryOrg'); }} 
-                  className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none ${invalidFields.includes('inventoryOrg') ? 'border-red-500 bg-red-50 dark:bg-red-900/10 ring-1 ring-red-500 focus:ring-2 focus:ring-red-500' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'}`}
+                  className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 ${fieldToneClass(nm('inventoryOrg'))}`}
                 >
                   <option value="">בחר ארגון...</option>
                   {data.inventoryOrganizations?.map(org => (
                     <option key={org.id} value={org.id}>{org.code} - {org.name}</option>
                   ))}
                 </select>
+                <FieldMessageBelow messages={nm('inventoryOrg')} />
               </div>
 
               {/* שדה מחסן מוצג רק אם היעד הוא מלאי, ואינו חובה */}
               {destinationType === 'Inventory' && (
-                <div className="animate-fade-in">
-                  <label className={`block text-xs font-bold mb-1.5 ${invalidFields.includes('subInventory') ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                <div className="animate-fade-in" data-validation-field="subInventory">
+                  <FieldLabelRow messages={nm('subInventory')}>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
                     מחסן (Sub-Inv)
                   </label>
+                  </FieldLabelRow>
                   <select 
                     value={subInventory} 
                     onChange={(e) => { setSubInventory(e.target.value); clearError('subInventory'); }} 
                     disabled={!inventoryOrg} 
-                    className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none ${invalidFields.includes('subInventory') ? 'border-red-500 bg-red-50 dark:bg-red-900/10 ring-1 ring-red-500 focus:ring-2 focus:ring-red-500' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'} ${!inventoryOrg ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 ${fieldToneClass(nm('subInventory'))} ${!inventoryOrg ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <option value="">בחר מחסן...</option>
                     {data.subInventories?.filter(s => String(s.inventoryOrgId) === String(inventoryOrg)).map(sub => (
                       <option key={sub.id} value={sub.code}>{sub.name} ({sub.code})</option>
                     ))}
                   </select>
+                  <FieldMessageBelow messages={nm('subInventory')} />
                 </div>
               )}
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">יחידת מידה</label>
-              <select value={uom} onChange={(e) => setUom(e.target.value)} className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none font-mono">
+            <div data-validation-field="uom">
+              <FieldLabelRow messages={nm('uom')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">יחידת מידה</label>
+              </FieldLabelRow>
+              <select value={uom} onChange={(e) => setUom(e.target.value)} className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none font-mono ${fieldToneClass(nm('uom'))}`}>
                 {data.uoms?.map(u => (
                   <option key={u.code} value={u.code}>{u.name} ({u.code})</option>
                 ))}
               </select>
+              <FieldMessageBelow messages={nm('uom')} />
             </div>
             
             <div className="hidden md:block"></div> {/* שומר על יישור הרשת (Grid) */}
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">כמות <span className="text-red-500">*</span></label>
+            <div data-validation-field="quantity">
+              <FieldLabelRow messages={nm('quantity')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">כמות <span className="text-red-500">*</span></label>
+              </FieldLabelRow>
               <input 
                 type="number" 
                 min="1" 
                 value={quantity} 
                 onChange={(e) => { setQuantity(e.target.value); clearError('quantity'); }} 
-                className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none font-mono ${invalidFields.includes('quantity') ? 'border-red-500 bg-red-50 dark:bg-red-900/10 ring-1 ring-red-500 focus:ring-2 focus:ring-red-500' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-blue-500'}`} 
+                className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none font-mono border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-blue-500 ${fieldToneClass(nm('quantity'))}`} 
               />
+              <FieldMessageBelow messages={nm('quantity')} />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מחיר ליחידה <span className="text-red-500">*</span></label>
+            <div data-validation-field="unitPrice">
+              <FieldLabelRow messages={nm('unitPrice')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מחיר ליחידה <span className="text-red-500">*</span></label>
+              </FieldLabelRow>
               <input 
                 type="number" 
                 min="0" 
@@ -349,30 +430,37 @@ export default function NonCatalogModal({
                 value={unitPrice} 
                 onChange={(e) => { setUnitPrice(e.target.value); clearError('unitPrice'); }} 
                 placeholder="0.00" 
-                className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none font-mono ${invalidFields.includes('unitPrice') ? 'border-red-500 bg-red-50 dark:bg-red-900/10 ring-1 ring-red-500 focus:ring-2 focus:ring-red-500' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-blue-500'}`} 
+                className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none font-mono border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-blue-500 ${fieldToneClass(nm('unitPrice'))}`} 
               />
+              <FieldMessageBelow messages={nm('unitPrice')} />
             </div>
 
             {/* קוביית כספים ושערי חליפין */}
             <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50/80 dark:bg-gray-900/30 p-4 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
-              <div>
-                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1">מטבע</label>
-                <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              <div data-validation-field="currency">
+                <FieldLabelRow messages={nm('currency')}>
+                  <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1">מטבע</label>
+                </FieldLabelRow>
+                <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={`w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${fieldToneClass(nm('currency'))}`}>
                   <option value="ILS">שקל חדש (ILS)</option>
                   <option value="USD">דולר אמריקאי (USD)</option>
                   <option value="EUR">אירו (EUR)</option>
                   <option value="GBP">ליש"ט (GBP)</option>
                 </select>
+                <FieldMessageBelow messages={nm('currency')} />
               </div>
-              <div>
-                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1">תאריך שערוך</label>
+              <div data-validation-field="exchangeDate">
+                <FieldLabelRow messages={nm('exchangeDate')}>
+                  <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1">תאריך שערוך</label>
+                </FieldLabelRow>
                 <input 
                   type="date" 
                   value={exchangeDate} 
                   onChange={(e) => handleExchangeDateChange(e.target.value)} 
                   disabled={currency === 'ILS'} 
-                  className={`w-full p-2 border rounded-lg text-sm outline-none font-mono ${currency === 'ILS' ? 'bg-gray-200 dark:bg-gray-700 border-transparent text-gray-400' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'}`} 
+                  className={`w-full p-2 border rounded-lg text-sm outline-none font-mono ${currency === 'ILS' ? 'bg-gray-200 dark:bg-gray-700 border-transparent text-gray-400' : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500'} ${fieldToneClass(nm('exchangeDate'))}`} 
                 />
+                <FieldMessageBelow messages={nm('exchangeDate')} />
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1">שער</label>
@@ -380,27 +468,33 @@ export default function NonCatalogModal({
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מאשר שירות {lineType === 'שירות' && <span className="text-red-500">*</span>}</label>
+            <div data-validation-field="serviceApprover">
+              <FieldLabelRow messages={nm('serviceApprover')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">מאשר שירות {lineType === 'שירות' && <span className="text-red-500">*</span>}</label>
+              </FieldLabelRow>
               <select 
                 value={serviceApprover} 
                 onChange={(e) => { setServiceApprover(e.target.value); clearError('serviceApprover'); }} 
-                className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none ${invalidFields.includes('serviceApprover') ? 'border-red-500 bg-red-50 dark:bg-red-900/10 ring-1 ring-red-500 focus:ring-2 focus:ring-red-500' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-blue-500'}`}
+                className={`w-full p-2.5 border rounded-xl text-sm transition-all outline-none border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-blue-500 ${fieldToneClass(nm('serviceApprover'))}`}
               >
                 <option value="">בחר מאשר שירות...</option>
                 {data.users?.map(u => (
                   <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                 ))}
               </select>
+              <FieldMessageBelow messages={nm('serviceApprover')} />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">קניין מומלץ</label>
-              <select value={buyer} onChange={(e) => setBuyer(e.target.value)} className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none">
+            <div data-validation-field="buyer">
+              <FieldLabelRow messages={nm('buyer')}>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">קניין מומלץ</label>
+              </FieldLabelRow>
+              <select value={buyer} onChange={(e) => setBuyer(e.target.value)} className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none ${fieldToneClass(nm('buyer'))}`}>
                 <option value="">בחר קניין...</option>
                 {data.buyers?.map(b => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
+              <FieldMessageBelow messages={nm('buyer')} />
             </div>
 
           </div>
@@ -427,6 +521,7 @@ export default function NonCatalogModal({
             </button>
           </div>
         </div>
+        </>)}
 
       </div>
     </div>

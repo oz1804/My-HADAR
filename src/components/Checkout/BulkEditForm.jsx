@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import data from '../../data/data.json';
-import BudgetLovFields, { BudgetErrorBox } from './BudgetLovFields';
-import { getInvalidDistFields } from '../../utils/budgetValidation';
+import BudgetLovFields from './BudgetLovFields';
+import { getBudgetMessages } from '../../utils/budgetValidation';
+import { runScreen, visibleMessages, messagesFor, hasBlocking } from '../../utils/validationEngine';
+import { bulkEditContext } from '../../utils/validationScreens';
+import { useValidationRules } from '../../hooks/validationRulesContext';
+import { FieldMessageBelow, FieldMessageSide } from '../Validation/FieldMessage';
+import { focusFirstBlocking } from '../Validation/fieldTone';
 
 export default function BulkEditForm({
   selectedLineIds,
@@ -11,6 +16,8 @@ export default function BulkEditForm({
 }) {
   const [bulkFields, setBulkFields] = useState({});
   const [bulkDists, setBulkDists] = useState([]);
+  const [attempted, setAttempted] = useState(false);   // הייתה לחיצה על "אשר ועדכן"
+  const rules = useValidationRules();
 
   const isSameUOM = selectedLinesData.length > 0 && selectedLinesData.every(l => l.uom === selectedLinesData[0].uom);
   const isSameQuantity = selectedLinesData.length > 0 && selectedLinesData.every(l => l.quantity === selectedLinesData[0].quantity);
@@ -98,31 +105,19 @@ export default function BulkEditForm({
     });
   };
 
+  // --- ולידציות המסך "עדכון קבוצתי" (סך האחוזים, כמויות שלמות ב-EA) ---
+  const allMessages = runScreen('BULK_EDIT', bulkEditContext({ distributions: bulkDists, lines: selectedLinesData, uom: commonUOM }), rules);
+  const sectionMessages = messagesFor(visibleMessages(allMessages, attempted), 'distributions');
+
   const handleApplyBulk = () => {
-    const totalPct = bulkDists.reduce((sum, d) => sum + (Number(d.percentage) || 0), 0);
-    if (Math.abs(totalPct - 100) > 0.01) {
-      alert('שגיאה: סך האחוזים בחלוקה התקציבית חייב להיות שווה בדיוק ל-100%');
+    setAttempted(true);
+    if (hasBlocking(allMessages)) {
+      focusFirstBlocking();
       return;
     }
-
-    if (commonUOM === 'EA') {
-      let hasDecimal = false;
-      selectedLinesData.forEach(line => {
-        bulkDists.forEach(d => {
-          const qty = (Number(d.percentage) / 100) * line.quantity;
-          if (Math.abs(qty - Math.round(qty)) > 0.001) hasDecimal = true;
-        });
-      });
-      if (hasDecimal) {
-        alert('שגיאה חמורה: פיצול ליחידת מידה (EA) דורש כמויות שלמות. האחוזים שהזנת גורמים ליצירת חלקי יחידות באחת או יותר מהשורות הנבחרות.');
-        return;
-      }
-    }
-
     onApplyBulkEdit(selectedLineIds, bulkFields, bulkDists);
     onClose();
   };
-
 
   const selectedOrgs = [...new Set(selectedLinesData.map(l => l.inventoryOrg).filter(Boolean))];
   const isAllInventory = selectedLinesData.length > 0 && selectedLinesData.every(l => l.destinationType === 'Inventory');
@@ -284,9 +279,13 @@ export default function BulkEditForm({
       </div>
 
       <div className="mt-6 pt-5 border-t border-blue-200/60 dark:border-gray-700/50">
-        <h5 className="font-extrabold text-sm text-blue-900 dark:text-blue-300 mb-3 flex items-center gap-2">
-          חלוקה תקציבית (לכלל השורות הנבחרות)
-        </h5>
+        <div className="flex items-center gap-3 mb-3" data-validation-field="distributions">
+          <h5 className="font-extrabold text-sm text-blue-900 dark:text-blue-300 flex items-center gap-2">
+            חלוקה תקציבית (לכלל השורות הנבחרות)
+          </h5>
+          <FieldMessageSide messages={sectionMessages} />
+        </div>
+        <FieldMessageBelow messages={sectionMessages} className="-mt-1 mb-3" />
         
         {bulkDists.map((dist, idx) => {
           const isBulkInventory = bulkFields.destinationType === 'Inventory' || (bulkFields.destinationType === '__MIXED__' && isAllInventory);
@@ -294,15 +293,15 @@ export default function BulkEditForm({
           const effectiveOrgs = bulkFields.inventoryOrg && bulkFields.inventoryOrg !== '__MIXED__' ? [bulkFields.inventoryOrg] : selectedOrgs;
 
           // בדיקת החלוקה מול כל אחת מהשורות הנבחרות (לפי היעד והארגון שיהיו להן אחרי העדכון)
-          const distErrors = [];
+          const distMessages = [];
           selectedLinesData.forEach(line => {
             const effLine = {
               ...line,
               destinationType: bulkFields.destinationType && bulkFields.destinationType !== '__MIXED__' ? bulkFields.destinationType : line.destinationType,
               inventoryOrg: bulkFields.inventoryOrg && bulkFields.inventoryOrg !== '__MIXED__' ? bulkFields.inventoryOrg : line.inventoryOrg
             };
-            getInvalidDistFields(effLine, dist).forEach(err => {
-              if (!distErrors.some(e => e.message === err.message)) distErrors.push(err);
+            getBudgetMessages(rules, effLine, dist).forEach(m => {
+              if (!distMessages.some(x => x.field === m.field && x.message === m.message)) distMessages.push(m);
             });
           });
           const commitBulkLov = (field, { value, text }) => {
@@ -339,7 +338,7 @@ export default function BulkEditForm({
                     orgIds={effectiveOrgs}
                     isInventory={isBulkInventory}
                     onCommit={commitBulkLov}
-                    badFields={distErrors.map(e => e.field)}
+                    messages={distMessages}
                     labelClassName="text-[10px] text-gray-500 font-bold mb-0.5"
                   />
                 </div>
@@ -350,7 +349,6 @@ export default function BulkEditForm({
                   </button>
                 )}
               </div>
-              <BudgetErrorBox errors={distErrors} />
             </div>
           );
         })}

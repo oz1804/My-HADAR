@@ -1,13 +1,17 @@
 import React from 'react';
 import CheckoutLineDistributionRow from './CheckoutLineDistributionRow';
+import { messagesFor } from '../../utils/validationEngine';
+import { FieldMessageSide, FieldMessageBelow } from '../Validation/FieldMessage';
 
 export default function CheckoutLineDistributions({ 
   line, 
   onAddDist, 
   onDistFieldChange, 
   onRemoveDist,
-  showBudgetErrors = false
+  lineMessages = [],          // הודעות השורה (מוצגות כאן רק אלה של "חלוקה תקציבית")
+  distMessages = () => []     // (distId) => הודעות שורת החלוקה
 }) {
+  const sectionMessages = messagesFor(lineMessages, 'distributions');
   const distributions = line.distributions || [];
   
   // חישוב כמות כוללת שחולקה כדי להציג חיווי למשתמש
@@ -33,6 +37,9 @@ export default function CheckoutLineDistributions({
           }`}>
             חולק: {totalAllocated} / {line.quantity}
           </div>
+          <span data-validation-field="distributions" className="contents">
+            <FieldMessageSide messages={sectionMessages} />
+          </span>
         </div>
 
         <button 
@@ -42,6 +49,8 @@ export default function CheckoutLineDistributions({
           <span>+</span> הוסף חלוקה (Split)
         </button>
       </div>
+
+      <FieldMessageBelow messages={sectionMessages} className="-mt-2 mb-3" />
 
       <div className="flex flex-col gap-2">
         {distributions.map((dist, idx) => (
@@ -53,19 +62,11 @@ export default function CheckoutLineDistributions({
             onDistFieldChange={onDistFieldChange}
             onRemoveDist={onRemoveDist}
             canRemove={distributions.length > 1}
-            showBudgetErrors={showBudgetErrors}
+            messages={distMessages(dist.id)}
           />
         ))}
       </div>
       
-      {!isBalanced && (
-        <div className="mt-2 text-[11px] font-bold text-rose-500 flex items-center gap-1">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-          </svg>
-          שים לב: סך כמות החלוקות אינו שווה לכמות הכוללת בשורה!
-        </div>
-      )}
     </div>
   );
 }

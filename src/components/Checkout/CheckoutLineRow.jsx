@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import data from '../../data/data.json';
-import { lineHasInvalidBudget } from '../../utils/budgetValidation';
 import CheckoutLineDistributions from './CheckoutLineDistributions';
+import { messagesFor, worstSeverity } from '../../utils/validationEngine';
+import { FieldLabelRow, FieldMessageBelow, FieldMessageSide, SeverityIcon } from '../Validation/FieldMessage';
+import { fieldToneClass, SEVERITY_TEXT } from '../Validation/fieldTone';
+
+// שדות השורה שמוצגים בשורה הראשית (גם כשהשורה סגורה)
+const SUMMARY_FIELDS = ['item', 'quantity', 'unitPrice'];
 
 export default function CheckoutLineRow({ 
   line, 
@@ -16,8 +21,9 @@ export default function CheckoutLineRow({
   onAddDist,
   onDistFieldChange,
   onRemoveDist,
-  budgetError = null,       // שגיאת סעיף תקציבי לשורה זו (רק אחרי ניסיון העברה לסבב)
-  showBudgetErrors = false
+  lineMessages = [],          // הודעות הוולידציה של השורה (כבר מסוננות לפי מה שמוצג עכשיו)
+  distMessages = () => [],    // (distId) => הודעות שורת החלוקה
+  showValidation = false      // הייתה לחיצה על "העבר לסבב אישורים"
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [wasClosedByUser, setWasClosedByUser] = useState(false);
@@ -27,11 +33,16 @@ export default function CheckoutLineRow({
   // חייב להיות אחרי כל ה-hooks!
   if (!line) return null;
 
-  // שורה עם סעיף תקציבי חסר נפתחת אוטומטית כדי שהשדות המסומנים יהיו גלויים
-  const hasBudgetError = !!budgetError;                 // אחרי ניסיון העברה לסבב
-  const hasInvalidBudget = lineHasInvalidBudget(line);  // ערך לא תקין מול ה-LOV - תמיד
-  const showBudgetFlag = hasBudgetError || hasInvalidBudget;
-  const isOpen = isExpanded || (hasBudgetError && !wasClosedByUser);
+  // הודעות הוולידציה: של השורה ושל שורות החלוקה שלה
+  const allDistMessages = (line.distributions || []).flatMap(d => distMessages(d.id));
+  const lm = (field) => messagesFor(lineMessages, field);
+  const hasLineBlocking = lineMessages.some(m => m.severity === 'ERROR');
+  const hasBudgetBlocking = allDistMessages.some(m => m.severity === 'ERROR');
+  const showBudgetFlag = hasLineBlocking || hasBudgetBlocking;
+  // הודעות שמוצגות רק בהגדרות הנוספות - כשהשורה סגורה מציגים עליהן חיווי בשורה הראשית
+  const hiddenMessages = [...lineMessages.filter(m => !SUMMARY_FIELDS.includes(m.field)), ...allDistMessages];
+  // אחרי ניסיון העברה לסבב: שורה עם הודעה חוסמת נפתחת כדי שהשדות המסומנים יהיו גלויים
+  const isOpen = isExpanded || (showValidation && showBudgetFlag && !wasClosedByUser);
   const toggleExpanded = () => {
     if (isOpen) { setIsExpanded(false); setWasClosedByUser(true); }
     else { setIsExpanded(true); setWasClosedByUser(false); }
@@ -71,7 +82,7 @@ export default function CheckoutLineRow({
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 font-mono mb-0.5">
               <span>מק"ט: {line.sku || 'ללא מק"ט'}</span>
               {showBudgetFlag && (
-                <span className="font-sans text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">{hasInvalidBudget ? 'סעיף תקציבי לא תקין' : 'חסר סעיף תקציבי'}</span>
+                <span className="font-sans text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">{hasBudgetBlocking ? 'סעיף תקציבי לא תקין' : 'יש לתקן את השורה'}</span>
               )}
               <span className="w-1 h-1 bg-gray-300 dark:bg-gray-600 rounded-full"></span>
               <span className="flex items-center gap-1" title="קניין מטפל">
@@ -81,33 +92,49 @@ export default function CheckoutLineRow({
                 {buyerName}
               </span>
             </div>
-            <span className="font-bold text-gray-900 dark:text-white text-base lg:text-lg line-clamp-2">
-              {line.itemDescription}
-            </span>
+            <div className="flex items-start gap-2 min-w-0" data-validation-field="item">
+              <span className="font-bold text-gray-900 dark:text-white text-base lg:text-lg line-clamp-2">
+                {line.itemDescription}
+              </span>
+              <FieldMessageSide messages={lm('item')} compact className="mt-1.5 shrink-0" />
+            </div>
+            <FieldMessageBelow messages={lm('item')} />
+            {!isOpen && hiddenMessages.length > 0 && (
+              <button
+                type="button"
+                onClick={toggleExpanded}
+                data-testid="line-hidden-messages"
+                className={`mt-1.5 self-start inline-flex items-center gap-1.5 text-[11px] font-bold hover:underline cursor-pointer ${SEVERITY_TEXT[worstSeverity(hiddenMessages)]}`}
+              >
+                <SeverityIcon severity={worstSeverity(hiddenMessages)} className="w-3.5 h-3.5" />
+                {hiddenMessages.length === 1 ? 'הודעה אחת' : `${hiddenMessages.length} הודעות`} בהגדרות הנוספות
+              </button>
+            )}
           </div>
         </div>
 
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 w-full sm:flex sm:w-auto sm:items-center sm:gap-4 bg-gray-50 dark:bg-gray-900/50 p-2 px-3 sm:px-4 rounded-xl shrink-0">
           
-          <div className="flex flex-col items-center min-w-0">
-            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">כמות</span>
+          <div className="flex flex-col items-center min-w-0" data-validation-field="quantity">
+            <span className="flex items-center gap-1 text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">כמות<FieldMessageSide messages={lm('quantity')} compact /></span>
             <div className="flex items-center gap-1">
               <input 
                 type="number" 
                 min="1"
                 value={line.quantity || 1}
                 onChange={(e) => onLineFieldChange(line.id, 'quantity', Number(e.target.value))}
-                className={`${stealthInputClass} w-14 sm:w-16 p-1.5 text-center font-bold text-gray-900 dark:text-white`}
+                className={`${stealthInputClass} w-14 sm:w-16 p-1.5 text-center font-bold text-gray-900 dark:text-white ${fieldToneClass(lm('quantity'))}`}
               />
               <span className="text-xs text-gray-500 font-medium">{line.uom}</span>
             </div>
+            <FieldMessageBelow messages={lm('quantity')} />
           </div>
 
           <div className="hidden sm:block h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
 
           {/* מחיר יחידה */}
-          <div className="flex flex-col items-center min-w-0 sm:min-w-[100px]">
-            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">מחיר יחידה</span>
+          <div className="flex flex-col items-center min-w-0 sm:min-w-[100px]" data-validation-field="unitPrice">
+            <span className="flex items-center gap-1 text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">מחיר יחידה<FieldMessageSide messages={lm('unitPrice')} compact /></span>
             <div className="flex items-center justify-center w-full sm:w-24 min-w-0">
               <span className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm ml-1 shrink-0">{currencySymbol}</span>
               {isPriceEditable ? (
@@ -117,7 +144,7 @@ export default function CheckoutLineRow({
                   value={line.unitPrice || ''}
                   onChange={(e) => onLineFieldChange(line.id, 'unitPrice', Number(e.target.value))}
                   placeholder="0.00"
-                  className={`${stealthInputClass.replace(' text-sm ', ' ')} w-full min-w-0 sm:w-20 p-1 text-right text-xs sm:text-sm font-bold text-gray-900 dark:text-white`}
+                  className={`${stealthInputClass.replace(' text-sm ', ' ')} w-full min-w-0 sm:w-20 p-1 text-right text-xs sm:text-sm font-bold text-gray-900 dark:text-white ${fieldToneClass(lm('unitPrice'))}`}
                 />
               ) : (
                 <div className="min-w-0 sm:w-20 p-1 text-right font-bold text-gray-900 dark:text-white text-xs sm:text-sm cursor-default truncate">
@@ -134,6 +161,7 @@ export default function CheckoutLineRow({
                 }
               </span>
             )}
+            <FieldMessageBelow messages={lm('unitPrice')} />
           </div>
 
           <div className="hidden sm:block h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
@@ -205,15 +233,20 @@ export default function CheckoutLineRow({
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">סוג שורה</label>
+              <div className="flex flex-col gap-1" data-validation-field="lineType">
+                <FieldLabelRow messages={lm('lineType')}>
+                  <label className="text-[11px] font-semibold text-gray-500">סוג שורה</label>
+                </FieldLabelRow>
                 <div className="p-1.5 px-3 bg-gray-50 dark:bg-gray-900 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 w-fit">
                   {line.lineType || 'טובין'}
                 </div>
+                <FieldMessageBelow messages={lm('lineType')} />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">יעד דרישה (Destination)</label>
+              <div className="flex flex-col gap-1" data-validation-field="destinationType">
+                <FieldLabelRow messages={lm('destinationType')}>
+                  <label className="text-[11px] font-semibold text-gray-500">יעד דרישה (Destination)</label>
+                </FieldLabelRow>
                 <select 
                   value={line.destinationType || 'Inventory'}
                   onChange={(e) => {
@@ -224,25 +257,31 @@ export default function CheckoutLineRow({
                       onLineFieldChange(line.id, 'subInventory', '');
                     }
                   }}
-                  className="p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${fieldToneClass(lm('destinationType'))}`}
                 >
                   <option value="Inventory">מלאי (Inventory)</option>
                   <option value="Expense">הוצאה (Expense)</option>
                 </select>
+                <FieldMessageBelow messages={lm('destinationType')} />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">תאריך נדרש</label>
+              <div className="flex flex-col gap-1" data-validation-field="needByDate">
+                <FieldLabelRow messages={lm('needByDate')}>
+                  <label className="text-[11px] font-semibold text-gray-500">תאריך נדרש</label>
+                </FieldLabelRow>
                 <input 
                   type="date" 
                   value={line.needByDate || ''}
                   onChange={(e) => onLineFieldChange(line.id, 'needByDate', e.target.value)}
-                  className="p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${fieldToneClass(lm('needByDate'))}`}
                 />
+                <FieldMessageBelow messages={lm('needByDate')} />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">ארגון מלאי</label>
+              <div className="flex flex-col gap-1" data-validation-field="inventoryOrg">
+                <FieldLabelRow messages={lm('inventoryOrg')}>
+                  <label className="text-[11px] font-semibold text-gray-500">ארגון מלאי</label>
+                </FieldLabelRow>
                 <select 
                   value={line.inventoryOrg || ''}
                   onChange={(e) => {
@@ -250,18 +289,21 @@ export default function CheckoutLineRow({
                     // איפוס המחסן ברגע שמשנים את הארגון שלו
                     onLineFieldChange(line.id, 'subInventory', '');
                   }}
-                  className="p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${fieldToneClass(lm('inventoryOrg'))}`}
                 >
                   {data.inventoryOrganizations?.map(org => (
                     <option key={org.id} value={org.id}>{org.code}</option>
                   ))}
                 </select>
+                <FieldMessageBelow messages={lm('inventoryOrg')} />
               </div>
 
               {/* --- התוספת החדשה: שדה מחסן (Sub-Inventory) --- */}
               {(!line.destinationType || line.destinationType === 'Inventory') && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-semibold text-gray-500">מחסן (Sub-Inv)</label>
+                <div className="flex flex-col gap-1" data-validation-field="subInventory">
+                  <FieldLabelRow messages={lm('subInventory')}>
+                    <label className="text-[11px] font-semibold text-gray-500">מחסן (Sub-Inv)</label>
+                  </FieldLabelRow>
                   <select 
                     value={line.subInventory || ''}
                     onChange={(e) => onLineFieldChange(line.id, 'subInventory', e.target.value)}
@@ -270,31 +312,37 @@ export default function CheckoutLineRow({
                       !line.inventoryOrg
                         ? 'bg-gray-100 border-gray-200 text-gray-400 dark:bg-gray-800/50 dark:border-gray-700/50 cursor-not-allowed'
                         : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700 focus:border-blue-500'
-                    }`}
+                    } ${fieldToneClass(lm('subInventory'))}`}
                   >
                     <option value="">בחר מחסן...</option>
                     {data.subInventories?.filter(s => String(s.inventoryOrgId) === String(line.inventoryOrg)).map(sub => (
                       <option key={sub.id} value={sub.code}>{sub.name} ({sub.code})</option>
                     ))}
                   </select>
+                  <FieldMessageBelow messages={lm('subInventory')} />
                 </div>
               )}
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">מטבע</label>
+              <div className="flex flex-col gap-1" data-validation-field="currency">
+                <FieldLabelRow messages={lm('currency')}>
+                  <label className="text-[11px] font-semibold text-gray-500">מטבע</label>
+                </FieldLabelRow>
                 <select 
                   value={line.currency || 'ILS'}
                   onChange={(e) => onLineFieldChange(line.id, 'currency', e.target.value)}
-                  className="p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${fieldToneClass(lm('currency'))}`}
                 >
                   <option value="ILS">ILS (שקל חדש)</option>
                   <option value="USD">USD (דולר ארה"ב)</option>
                   <option value="EUR">EUR (אירו)</option>
                 </select>
+                <FieldMessageBelow messages={lm('currency')} />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">תאריך שערוך</label>
+              <div className="flex flex-col gap-1" data-validation-field="exchangeDate">
+                <FieldLabelRow messages={lm('exchangeDate')}>
+                  <label className="text-[11px] font-semibold text-gray-500">תאריך שערוך</label>
+                </FieldLabelRow>
                 <input 
                   type="date" 
                   value={line.exchangeDate || ''}
@@ -304,9 +352,10 @@ export default function CheckoutLineRow({
                     line.currency === 'ILS' || !line.currency
                       ? 'bg-gray-100 border-gray-200 text-gray-400 dark:bg-gray-800/50 dark:border-gray-700/50 cursor-not-allowed' 
                       : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700 focus:border-blue-500'
-                  }`}
+                  } ${fieldToneClass(lm('exchangeDate'))}`}
                   title={line.currency === 'ILS' ? "לא נדרש שערוך למטבע מקומי" : ""}
                 />
+                <FieldMessageBelow messages={lm('exchangeDate')} />
               </div>
 
               <div className="flex flex-col gap-1">
@@ -323,26 +372,31 @@ export default function CheckoutLineRow({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">ספק מומלץ</label>
+              <div className="flex flex-col gap-1" data-validation-field="supplier">
+                <FieldLabelRow messages={lm('supplier')}>
+                  <label className="text-[11px] font-semibold text-gray-500">ספק מומלץ</label>
+                </FieldLabelRow>
                 <select 
                   value={line.supplier || ''} 
                   onChange={(e) => onLineFieldChange(line.id, 'supplier', e.target.value)}
-                  className="p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${fieldToneClass(lm('supplier'))}`}
                 >
                   <option value="">לא הוגדר</option>
                   {data.suppliers?.map(s => (
                     <option key={s.id} value={s.id}>{s.name || s.id}</option>
                   ))}
                 </select>
+                <FieldMessageBelow messages={lm('supplier')} />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">דרישות איכות</label>
+              <div className="flex flex-col gap-1" data-validation-field="qualityRequirement">
+                <FieldLabelRow messages={lm('qualityRequirement')}>
+                  <label className="text-[11px] font-semibold text-gray-500">דרישות איכות</label>
+                </FieldLabelRow>
                 <select 
                   value={line.qualityRequirement || ''}
                   onChange={(e) => onLineFieldChange(line.id, 'qualityRequirement', e.target.value)}
-                  className="p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`p-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${fieldToneClass(lm('qualityRequirement'))}`}
                 >
                   <option value="">ללא</option>
                   {data.qualityRequirements?.map((q, i) => {
@@ -351,73 +405,89 @@ export default function CheckoutLineRow({
                     return <option key={val} value={val}>{display}</option>;
                   })}
                 </select>
+                <FieldMessageBelow messages={lm('qualityRequirement')} />
               </div>
 
               {/* --- שדה המזמין --- */}
-              <div className="flex flex-col gap-1 lg:col-span-1">
-                <label className="text-[11px] font-semibold text-gray-500">מזמין</label>
+              <div className="flex flex-col gap-1 lg:col-span-1" data-validation-field="requester">
+                <FieldLabelRow messages={lm('requester')}>
+                  <label className="text-[11px] font-semibold text-gray-500">מזמין</label>
+                </FieldLabelRow>
                 <select 
                   value={line.requester || ''}
                   onChange={(e) => onLineFieldChange(line.id, 'requester', e.target.value)}
-                  className="p-1.5 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`p-1.5 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${fieldToneClass(lm('requester'))}`}
                 >
                   <option value="">לא הוגדר</option>
                   {data.users?.map(u => (
                     <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                   ))}
                 </select>
+                <FieldMessageBelow messages={lm('requester')} />
               </div>
 
               {/* --- שדה מאשר שירות --- */}
-              <div className="flex flex-col gap-1 lg:col-span-1">
-                <label className="text-[11px] font-semibold text-gray-500">מאשר שירות</label>
+              <div className="flex flex-col gap-1 lg:col-span-1" data-validation-field="serviceApprover">
+                <FieldLabelRow messages={lm('serviceApprover')}>
+                  <label className="text-[11px] font-semibold text-gray-500">מאשר שירות</label>
+                </FieldLabelRow>
                 <select 
                   value={line.serviceApprover || ''}
                   onChange={(e) => onLineFieldChange(line.id, 'serviceApprover', e.target.value)}
-                  className="p-1.5 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`p-1.5 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${fieldToneClass(lm('serviceApprover'))}`}
                 >
                   <option value="">לא הוגדר</option>
                   {data.users?.map(u => (
                     <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                   ))}
                 </select>
+                <FieldMessageBelow messages={lm('serviceApprover')} />
               </div>
 
-              <div className="flex flex-col gap-1 lg:col-span-1">
-                <label className="text-[11px] font-semibold text-gray-500">קניין מומלץ</label>
+              <div className="flex flex-col gap-1 lg:col-span-1" data-validation-field="buyer">
+                <FieldLabelRow messages={lm('buyer')}>
+                  <label className="text-[11px] font-semibold text-gray-500">קניין מומלץ</label>
+                </FieldLabelRow>
                 <select 
                   value={line.buyer || ''}
                   onChange={(e) => onLineFieldChange(line.id, 'buyer', e.target.value)}
-                  className="p-1.5 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`p-1.5 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${fieldToneClass(lm('buyer'))}`}
                 >
                   <option value="">לא הוגדר</option>
                   {data.buyers?.map((b) => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
+                <FieldMessageBelow messages={lm('buyer')} />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700/50">
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">הערות לקניין</label>
+              <div className="flex flex-col gap-1" data-validation-field="buyerNotes">
+                <FieldLabelRow messages={lm('buyerNotes')}>
+                  <label className="text-[11px] font-semibold text-gray-500">הערות לקניין</label>
+                </FieldLabelRow>
                 <textarea 
                   rows="2"
                   value={line.buyerNotes || ''}
                   onChange={(e) => onLineFieldChange(line.id, 'buyerNotes', e.target.value)}
-                  className="p-2 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                  className={`p-2 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none ${fieldToneClass(lm('buyerNotes'))}`}
                   placeholder="הערות שיועברו לקניין..."
                 />
+                <FieldMessageBelow messages={lm('buyerNotes')} />
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-gray-500">הצדקה</label>
+              <div className="flex flex-col gap-1" data-validation-field="justification">
+                <FieldLabelRow messages={lm('justification')}>
+                  <label className="text-[11px] font-semibold text-gray-500">הצדקה</label>
+                </FieldLabelRow>
                 <textarea 
                   rows="2"
                   value={line.justification || ''}
                   onChange={(e) => onLineFieldChange(line.id, 'justification', e.target.value)}
-                  className="p-2 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                  className={`p-2 w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none ${fieldToneClass(lm('justification'))}`}
                   placeholder="הצדקה לרכש..."
                 />
+                <FieldMessageBelow messages={lm('justification')} />
               </div>
             </div>
             
@@ -426,7 +496,8 @@ export default function CheckoutLineRow({
               onAddDist={onAddDist}
               onDistFieldChange={onDistFieldChange}
               onRemoveDist={onRemoveDist}
-              showBudgetErrors={showBudgetErrors}
+              lineMessages={lineMessages}
+              distMessages={distMessages}
             />
 
           </div>
